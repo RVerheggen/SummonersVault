@@ -3,7 +3,7 @@ using SummonersVault.Core.Models;
 namespace SummonersVault.Core.Services;
 
 public enum AccountSort { Name, RecentlyPlayed }
-public sealed record AccountFilter(string? Region = null, string? RankOrQueue = null, string? Role = null, string? Champion = null, string? Skin = null, MatchHistoryState? SyncState = null);
+public sealed record AccountFilter(string? Region = null, string? Queue = null, string? Rank = null, AccountRole Roles = AccountRole.None, string? Champion = null, string? Skin = null, MatchHistoryState? SyncState = null);
 
 public static class AccountSearch
 {
@@ -20,9 +20,19 @@ public static class AccountSearch
     {
         if (filter is null) return true;
         var comparison = StringComparison.CurrentCultureIgnoreCase;
-        return (string.IsNullOrWhiteSpace(filter.Region) || account.Region.Contains(filter.Region, comparison))
-            && (string.IsNullOrWhiteSpace(filter.RankOrQueue) || account.Ranks.Any(x => x.Tier.Contains(filter.RankOrQueue, comparison) || x.QueueType.Contains(filter.RankOrQueue, comparison)))
-            && (string.IsNullOrWhiteSpace(filter.Role) || account.Roles.ToString().Contains(filter.Role, comparison))
+        bool rankMatches;
+        if (string.IsNullOrWhiteSpace(filter.Queue) && string.IsNullOrWhiteSpace(filter.Rank))
+            rankMatches = true;
+        else if (string.Equals(filter.Rank?.Trim(), "Unranked", comparison))
+            rankMatches = account.Ranks.Any(rank => (string.IsNullOrWhiteSpace(filter.Queue) || rank.QueueType.Equals(filter.Queue, comparison)) && rank.Tier.Equals("UNRANKED", comparison))
+                || string.IsNullOrWhiteSpace(filter.Queue) && account.Ranks.Count == 0;
+        else
+            rankMatches = account.Ranks.Any(rank =>
+                (string.IsNullOrWhiteSpace(filter.Queue) || rank.QueueType.Equals(filter.Queue, comparison))
+                && (string.IsNullOrWhiteSpace(filter.Rank) || $"{rank.Tier} {rank.Division}".Contains(filter.Rank, comparison)));
+        return (string.IsNullOrWhiteSpace(filter.Region) || account.Region.Equals(filter.Region, comparison))
+            && rankMatches
+            && (filter.Roles == AccountRole.None || (account.Roles & filter.Roles) != AccountRole.None)
             && (string.IsNullOrWhiteSpace(filter.Champion) || account.Champions.Any(x => x.Name.Contains(filter.Champion, comparison)))
             && (string.IsNullOrWhiteSpace(filter.Skin) || account.Skins.Any(x => x.Name.Contains(filter.Skin, comparison)))
             && (!filter.SyncState.HasValue || account.MatchHistoryState == filter.SyncState.Value);

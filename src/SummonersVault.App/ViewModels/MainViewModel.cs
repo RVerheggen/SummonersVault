@@ -30,9 +30,14 @@ public sealed partial class MainViewModel(
     [ObservableProperty] private ShellState state;
     [ObservableProperty] private string query = string.Empty;
     [ObservableProperty] private bool sortRecentlyPlayed;
-    [ObservableProperty] private string regionFilter = string.Empty;
+    [ObservableProperty] private int regionFilterIndex;
+    [ObservableProperty] private int queueFilterIndex;
     [ObservableProperty] private string rankFilter = string.Empty;
-    [ObservableProperty] private string roleFilter = string.Empty;
+    [ObservableProperty] private bool filterTop;
+    [ObservableProperty] private bool filterJungle;
+    [ObservableProperty] private bool filterMid;
+    [ObservableProperty] private bool filterBot;
+    [ObservableProperty] private bool filterSupport;
     [ObservableProperty] private string championFilter = string.Empty;
     [ObservableProperty] private string skinFilter = string.Empty;
     [ObservableProperty] private int syncFilterIndex;
@@ -42,6 +47,9 @@ public sealed partial class MainViewModel(
     [ObservableProperty] private bool isClientConnected;
     [ObservableProperty] private AppSettings settings = new();
     public ObservableCollection<AccountCardViewModel> Accounts { get; } = [];
+    public ObservableCollection<string> RankSuggestions { get; } = [];
+    public ObservableCollection<string> ChampionSuggestions { get; } = [];
+    public ObservableCollection<string> SkinSuggestions { get; } = [];
     public IBackupService Backup => backup;
     public bool IsOnboarding => State == ShellState.Onboarding;
     public bool IsLocked => State == ShellState.Locked;
@@ -50,9 +58,14 @@ public sealed partial class MainViewModel(
     partial void OnStateChanged(ShellState value) { OnPropertyChanged(nameof(IsOnboarding)); OnPropertyChanged(nameof(IsLocked)); OnPropertyChanged(nameof(IsVault)); }
     partial void OnQueryChanged(string value) => DebounceFilter();
     partial void OnSortRecentlyPlayedChanged(bool value) => ApplyFilter();
-    partial void OnRegionFilterChanged(string value) => DebounceFilter();
+    partial void OnRegionFilterIndexChanged(int value) => ApplyFilter();
+    partial void OnQueueFilterIndexChanged(int value) => ApplyFilter();
     partial void OnRankFilterChanged(string value) => DebounceFilter();
-    partial void OnRoleFilterChanged(string value) => DebounceFilter();
+    partial void OnFilterTopChanged(bool value) => RoleFiltersChanged();
+    partial void OnFilterJungleChanged(bool value) => RoleFiltersChanged();
+    partial void OnFilterMidChanged(bool value) => RoleFiltersChanged();
+    partial void OnFilterBotChanged(bool value) => RoleFiltersChanged();
+    partial void OnFilterSupportChanged(bool value) => RoleFiltersChanged();
     partial void OnChampionFilterChanged(string value) => DebounceFilter();
     partial void OnSkinFilterChanged(string value) => DebounceFilter();
     partial void OnSyncFilterIndexChanged(int value) => ApplyFilter();
@@ -110,6 +123,7 @@ public sealed partial class MainViewModel(
     {
         _accounts.Clear();
         _accounts.AddRange(await session.Repository.GetAccountsAsync());
+        RefreshFilterSuggestions();
         ApplyFilter();
     }
 
@@ -220,9 +234,60 @@ public sealed partial class MainViewModel(
     {
         Accounts.Clear();
         var syncState = SyncFilterIndex switch { 1 => MatchHistoryState.Known, 2 => MatchHistoryState.NeverPlayed, 3 => MatchHistoryState.Unknown, 4 => MatchHistoryState.Stale, _ => (MatchHistoryState?)null };
-        var facets = new AccountFilter(RegionFilter, RankFilter, RoleFilter, ChampionFilter, SkinFilter, syncState);
+        var region = RegionFilterIndex switch { 1 => "EUW1", 2 => "EUN1", 3 => "NA1", 4 => "KR", 5 => "BR1", 6 => "JP1", 7 => "LA1", 8 => "LA2", 9 => "OC1", 10 => "TR1", _ => null };
+        var queue = QueueFilterIndex switch { 1 => "RANKED_SOLO_5x5", 2 => "RANKED_FLEX_SR", _ => null };
+        var facets = new AccountFilter(region, queue, RankFilter, SelectedRoleFilters, ChampionFilter, SkinFilter, syncState);
         foreach (var account in AccountSearch.Apply(_accounts, Query, SortRecentlyPlayed ? AccountSort.RecentlyPlayed : AccountSort.Name, facets)) Accounts.Add(new(account));
     }
+
+    public string RoleFilterSummary
+    {
+        get
+        {
+            var roles = new List<string>(5);
+            if (FilterTop) roles.Add("Top");
+            if (FilterJungle) roles.Add("Jungle");
+            if (FilterMid) roles.Add("Mid");
+            if (FilterBot) roles.Add("Bot");
+            if (FilterSupport) roles.Add("Support");
+            return roles.Count == 0 ? "Any role" : string.Join(", ", roles);
+        }
+    }
+
+    private AccountRole SelectedRoleFilters =>
+        (FilterTop ? AccountRole.Top : AccountRole.None)
+        | (FilterJungle ? AccountRole.Jungle : AccountRole.None)
+        | (FilterMid ? AccountRole.Mid : AccountRole.None)
+        | (FilterBot ? AccountRole.Bot : AccountRole.None)
+        | (FilterSupport ? AccountRole.Support : AccountRole.None);
+
+    private void RoleFiltersChanged()
+    {
+        OnPropertyChanged(nameof(RoleFilterSummary));
+        ApplyFilter();
+    }
+
+    private void RefreshFilterSuggestions()
+    {
+        var rankValues = _accounts.SelectMany(account => account.Ranks).SelectMany(rank =>
+            {
+                var tier = Title(rank.Tier);
+                return new[] { tier, string.IsNullOrWhiteSpace(rank.Division) ? tier : $"{tier} {rank.Division}" };
+            })
+            .Concat(_accounts.Any(account => account.CardRank is null) ? ["Unranked"] : []);
+        ReplaceSuggestions(RankSuggestions, rankValues);
+        ReplaceSuggestions(ChampionSuggestions, _accounts.SelectMany(account => account.Champions).Select(champion => champion.Name));
+        ReplaceSuggestions(SkinSuggestions, _accounts.SelectMany(account => account.Skins).Select(skin => skin.Name));
+    }
+
+    private static void ReplaceSuggestions(ObservableCollection<string> target, IEnumerable<string> values)
+    {
+        target.Clear();
+        foreach (var value in values.Where(value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.CurrentCultureIgnoreCase).OrderBy(value => value, StringComparer.CurrentCultureIgnoreCase))
+            target.Add(value);
+    }
+
+    private static string Title(string value) => string.IsNullOrEmpty(value) ? value : char.ToUpperInvariant(value[0]) + value[1..].ToLowerInvariant();
 
     public async ValueTask DisposeAsync()
     {

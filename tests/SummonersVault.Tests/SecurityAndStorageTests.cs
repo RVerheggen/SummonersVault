@@ -57,7 +57,9 @@ public sealed class SecurityAndStorageTests
         account.Champions.Add(new(103, "Ahri")); account.Skins.Add(new(103001, 103, "Dynasty Ahri"));
         Assert.Equal("GOLD", account.CardRank?.Tier);
         Assert.Single(AccountSearch.Apply([account], "dynasty weakside", AccountSort.Name));
-        Assert.Single(AccountSearch.Apply([account], null, AccountSort.Name, new(Region: "EUW", RankOrQueue: "gold", Role: "top", Champion: "ahri", Skin: "dynasty")));
+        Assert.Single(AccountSearch.Apply([account], null, AccountSort.Name, new(Region: "EUW1", Queue: "RANKED_SOLO_5x5", Rank: "gold iv", Roles: AccountRole.Top, Champion: "ahri", Skin: "dynasty")));
+        Assert.Empty(AccountSearch.Apply([account], null, AccountSort.Name, new(Queue: "RANKED_FLEX_SR", Rank: "gold")));
+        Assert.Single(AccountSearch.Apply([account], null, AccountSort.Name, new(Roles: AccountRole.Top | AccountRole.Jungle)));
         Assert.Empty(AccountSearch.Apply([account], null, AccountSort.Name, new(Region: "NA")));
     }
 

@@ -58,6 +58,7 @@ public partial class MainWindow : Window
     private async void CopyPassword_Click(object sender, RoutedEventArgs e) { if (TryGetId(sender, out var id)) await _viewModel.CopyPasswordAsync(id); }
     private async void Launch_Click(object sender, RoutedEventArgs e) { if (TryGetId(sender, out var id)) await _viewModel.LaunchAsync(id); }
     private async void Sync_Click(object sender, RoutedEventArgs e) { if (TryGetId(sender, out var id)) await _viewModel.SyncAsync(id); }
+    private void SuggestionFilter_PreviewTextInput(object sender, TextCompositionEventArgs e) { if (sender is ComboBox comboBox && comboBox.Items.Count > 0) comboBox.IsDropDownOpen = true; }
     private void Sort_SelectionChanged(object sender, SelectionChangedEventArgs e) { if (_viewModel is not null) _viewModel.SortRecentlyPlayed = ((ComboBox)sender).SelectedIndex == 1; }
     private void Settings_Click(object sender, RoutedEventArgs e) => new SettingsWindow(_viewModel) { Owner = this }.ShowDialog();
     private void About_Click(object sender, RoutedEventArgs e) => MessageBox.Show(this, "SummonersVault is a free, local-only community password manager and League companion.\n\nSummonersVault isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games and all associated properties are trademarks or registered trademarks of Riot Games, Inc.\n\nNo credentials are sent to Riot by this app.", "About SummonersVault", MessageBoxButton.OK, MessageBoxImage.Information);
