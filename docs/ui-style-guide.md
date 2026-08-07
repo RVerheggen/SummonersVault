@@ -66,4 +66,4 @@ Bijbehorende neutrale CSS-variabelen:
 
 All colors are exposed as brushes in `Themes/Theme.xaml`. Layout uses 8 px spacing increments, 12 px control radii, and 16 px panel radii. Segoe UI Variable is the preferred typeface, with Segoe UI as fallback. Account status always combines text with an icon or shape. Motion is optional decoration and never required to understand state.
 
-Current product refinement: the implemented primary interaction blue is a quieter steel blue (`#6387B5`, hover `#7497C4`). The canonical prompt above remains verbatim; this refinement supersedes its original primary-blue values in the application theme.
+Current product refinement: the implemented primary interaction color is antique gold (`#B88A3D`, hover `#C99B4D`), with muted-gold input outlines. The canonical prompt above remains verbatim; this refinement supersedes its original primary-blue values in the application theme.
