@@ -45,6 +45,8 @@ public sealed partial class MainViewModel(
     [ObservableProperty] private bool isBusy;
     [ObservableProperty] private string clientStatus = "League Client not checked";
     [ObservableProperty] private bool isClientConnected;
+    [ObservableProperty] private bool showEmptyVault;
+    [ObservableProperty] private bool showNoFilterResults;
     [ObservableProperty] private AppSettings settings = new();
     public ObservableCollection<AccountCardViewModel> Accounts { get; } = [];
     public ObservableCollection<string> RankSuggestions { get; } = [];
@@ -238,6 +240,21 @@ public sealed partial class MainViewModel(
         var queue = QueueFilterIndex switch { 1 => "RANKED_SOLO_5x5", 2 => "RANKED_FLEX_SR", _ => null };
         var facets = new AccountFilter(region, queue, RankFilter, SelectedRoleFilters, ChampionFilter, SkinFilter, syncState);
         foreach (var account in AccountSearch.Apply(_accounts, Query, SortRecentlyPlayed ? AccountSort.RecentlyPlayed : AccountSort.Name, facets)) Accounts.Add(new(account));
+        ShowEmptyVault = _accounts.Count == 0;
+        ShowNoFilterResults = _accounts.Count > 0 && Accounts.Count == 0;
+    }
+
+    public void ClearFilters()
+    {
+        Query = string.Empty;
+        RegionFilterIndex = 0;
+        QueueFilterIndex = 0;
+        RankFilter = string.Empty;
+        FilterTop = FilterJungle = FilterMid = FilterBot = FilterSupport = false;
+        ChampionFilter = string.Empty;
+        SkinFilter = string.Empty;
+        SyncFilterIndex = 0;
+        ApplyFilter();
     }
 
     public string RoleFilterSummary
@@ -277,7 +294,7 @@ public sealed partial class MainViewModel(
             .Concat(_accounts.Any(account => account.CardRank is null) ? ["Unranked"] : []);
         ReplaceSuggestions(RankSuggestions, rankValues);
         ReplaceSuggestions(ChampionSuggestions, _accounts.SelectMany(account => account.Champions).Select(champion => champion.Name));
-        ReplaceSuggestions(SkinSuggestions, _accounts.SelectMany(account => account.Skins).Select(skin => skin.Name));
+        ReplaceSuggestions(SkinSuggestions, OwnedSkinRules.Normalize(_accounts.SelectMany(account => account.Skins)).Select(skin => skin.Name));
     }
 
     private static void ReplaceSuggestions(ObservableCollection<string> target, IEnumerable<string> values)

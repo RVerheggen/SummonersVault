@@ -188,7 +188,11 @@ public sealed class LeagueClientGateway : ILeagueClientGateway
     {
         using var json = await TryGetJsonAsync(client, $"lol-champions/v1/inventories/{summonerId}/skins-minimal", cancellationToken).ConfigureAwait(false);
         if (json is null || json.RootElement.ValueKind != JsonValueKind.Array) return null;
-        return json.RootElement.EnumerateArray().Where(IsOwned).Select(x => new OwnedSkin(GetInt32(x, "id") ?? 0, GetInt32(x, "championId") ?? 0, GetString(x, "name") ?? "Unknown skin")).Where(x => x.SkinId > 0).ToArray();
+        var skins = json.RootElement.EnumerateArray()
+            .Where(IsOwned)
+            .Where(x => GetBoolean(x, "isBase") != true)
+            .Select(x => new OwnedSkin(GetInt32(x, "id") ?? 0, GetInt32(x, "championId") ?? 0, GetString(x, "name") ?? "Unknown skin"));
+        return OwnedSkinRules.Normalize(skins);
     }
 
     private static async Task<MatchSnapshotResult> FetchLatestMatchAsync(HttpClient client, string puuid, CancellationToken cancellationToken)
@@ -222,4 +226,5 @@ public sealed class LeagueClientGateway : ILeagueClientGateway
     private static string? GetString(JsonElement element, string property) => element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
     private static int? GetInt32(JsonElement element, string property) => element.TryGetProperty(property, out var value) && value.TryGetInt32(out var result) ? result : null;
     private static long? GetInt64(JsonElement element, string property) => element.TryGetProperty(property, out var value) && value.TryGetInt64(out var result) ? result : null;
+    private static bool? GetBoolean(JsonElement element, string property) => element.TryGetProperty(property, out var value) && value.ValueKind is JsonValueKind.True or JsonValueKind.False ? value.GetBoolean() : null;
 }

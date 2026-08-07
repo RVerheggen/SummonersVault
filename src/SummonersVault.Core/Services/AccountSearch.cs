@@ -34,7 +34,7 @@ public static class AccountSearch
             && rankMatches
             && (filter.Roles == AccountRole.None || (account.Roles & filter.Roles) != AccountRole.None)
             && (string.IsNullOrWhiteSpace(filter.Champion) || account.Champions.Any(x => x.Name.Contains(filter.Champion, comparison)))
-            && (string.IsNullOrWhiteSpace(filter.Skin) || account.Skins.Any(x => x.Name.Contains(filter.Skin, comparison)))
+            && (string.IsNullOrWhiteSpace(filter.Skin) || OwnedSkinRules.Normalize(account.Skins).Any(x => x.Name.Contains(filter.Skin, comparison)))
             && (!filter.SyncState.HasValue || account.MatchHistoryState == filter.SyncState.Value);
     }
 
@@ -48,6 +48,6 @@ public static class AccountSearch
             || account.Roles.ToString().Contains(term, comparison)
             || account.Ranks.Any(x => x.Tier.Contains(term, comparison) || x.Division.Contains(term, comparison) || x.QueueType.Contains(term, comparison))
             || account.Champions.Any(x => x.Name.Contains(term, comparison))
-            || account.Skins.Any(x => x.Name.Contains(term, comparison));
+            || OwnedSkinRules.Normalize(account.Skins).Any(x => x.Name.Contains(term, comparison));
     }
 }

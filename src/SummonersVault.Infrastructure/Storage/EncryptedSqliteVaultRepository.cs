@@ -155,7 +155,7 @@ public sealed class EncryptedSqliteVaultRepository(VaultPaths paths) : IVaultRep
             account.ModifiedAtUtc = DateTimeOffset.UtcNow;
             if (snapshot.Ranks is not null) { account.Ranks.Clear(); account.Ranks.AddRange(snapshot.Ranks); }
             if (snapshot.Champions is not null) { account.Champions.Clear(); account.Champions.AddRange(snapshot.Champions); }
-            if (snapshot.Skins is not null) { account.Skins.Clear(); account.Skins.AddRange(snapshot.Skins); }
+            if (snapshot.Skins is not null) { account.Skins.Clear(); account.Skins.AddRange(OwnedSkinRules.Normalize(snapshot.Skins)); }
 
             if (snapshot.Match.Succeeded)
             {
@@ -212,7 +212,7 @@ public sealed class EncryptedSqliteVaultRepository(VaultPaths paths) : IVaultRep
         foreach (var champion in account.Champions)
             await ExecuteAsync(connection, transaction, "INSERT INTO champions(account_id,champion_id,name) VALUES($id,$championId,$name)", cancellationToken,
                 ("$id", account.Id.ToString("D")), ("$championId", champion.ChampionId), ("$name", champion.Name)).ConfigureAwait(false);
-        foreach (var skin in account.Skins)
+        foreach (var skin in OwnedSkinRules.Normalize(account.Skins))
             await ExecuteAsync(connection, transaction, "INSERT INTO skins(account_id,skin_id,champion_id,name) VALUES($id,$skinId,$championId,$name)", cancellationToken,
                 ("$id", account.Id.ToString("D")), ("$skinId", skin.SkinId), ("$championId", skin.ChampionId), ("$name", skin.Name)).ConfigureAwait(false);
         if (ownedTransaction is not null) await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -252,7 +252,10 @@ public sealed class EncryptedSqliteVaultRepository(VaultPaths paths) : IVaultRep
             command.CommandText = "SELECT skin_id,champion_id,name FROM skins WHERE account_id=$id";
             command.Parameters.AddWithValue("$id", account.Id.ToString("D"));
             await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) account.Skins.Add(new(reader.GetInt32(0), reader.GetInt32(1), reader.GetString(2)));
+            var skins = new List<OwnedSkin>();
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                skins.Add(new OwnedSkin(reader.GetInt32(0), reader.GetInt32(1), reader.GetString(2)));
+            account.Skins.AddRange(OwnedSkinRules.Normalize(skins));
         }
     }
 

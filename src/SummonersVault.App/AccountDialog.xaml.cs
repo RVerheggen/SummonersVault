@@ -33,9 +33,10 @@ public partial class AccountDialog : Window
         LeagueIdentity.Text = string.IsNullOrWhiteSpace(account.RiotGameName) ? "Linked League profile" : $"{account.RiotGameName}#{account.RiotTagLine} · level {account.SummonerLevel}";
         LeagueSummary.Text = account.Ranks.Count == 0 ? "Unranked" : string.Join(" · ", account.Ranks.Select(x => $"{x.QueueType.Replace("RANKED_", string.Empty, StringComparison.Ordinal)}: {x.Tier} {x.Division} {x.LeaguePoints} LP"));
         MatchSummary.Text = account.MatchHistoryState switch { MatchHistoryState.NeverPlayed => "Never played", MatchHistoryState.Unknown => "Match history not synced", MatchHistoryState.Stale => $"Last played {account.LastMatchPlayedAtUtc?.ToLocalTime():f} · data may be stale", _ => $"Last played {account.LastMatchPlayedAtUtc?.ToLocalTime():f}" };
-        OwnershipSummary.Text = $"{account.Champions.Count} champions · {account.Skins.Count} skins owned · synced {account.LastSyncedAtUtc?.ToLocalTime():g}";
+        var countedSkins = OwnedSkinRules.Normalize(account.Skins);
+        OwnershipSummary.Text = $"{account.Champions.Count} champions · {countedSkins.Count} skins owned · synced {account.LastSyncedAtUtc?.ToLocalTime():g}";
         ChampionNames.Text = account.Champions.Count == 0 ? "No champion snapshot" : string.Join(", ", account.Champions.Select(x => x.Name));
-        SkinNames.Text = account.Skins.Count == 0 ? "No skin snapshot" : string.Join(", ", account.Skins.Select(x => x.Name));
+        SkinNames.Text = countedSkins.Count == 0 ? "No skin snapshot" : string.Join(", ", countedSkins.Select(x => x.Name));
     }
 
     private void Save_Click(object sender, RoutedEventArgs e)

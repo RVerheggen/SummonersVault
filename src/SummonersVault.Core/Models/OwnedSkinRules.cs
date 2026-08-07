@@ -1,0 +1,48 @@
+namespace SummonersVault.Core.Models;
+
+public static class OwnedSkinRules
+{
+    private const int AlternateChampionIdOffset = 60_000;
+    private const int AlternateSkinIdOffset = 60_000_000;
+
+    public static OwnedSkin Canonicalize(OwnedSkin skin)
+    {
+        if (skin.ChampionId is >= AlternateChampionIdOffset and < 70_000
+            && skin.SkinId >= AlternateSkinIdOffset)
+        {
+            var championId = skin.ChampionId - AlternateChampionIdOffset;
+            var skinId = skin.SkinId - AlternateSkinIdOffset;
+            if (championId > 0 && skinId > 0 && skinId / 1000 == championId)
+                return new OwnedSkin(skinId, championId, skin.Name);
+        }
+
+        return skin;
+    }
+
+    public static IReadOnlyList<OwnedSkin> Normalize(IEnumerable<OwnedSkin> skins) => skins
+        .Select(Canonicalize)
+        .Where(IsCountedCanonical)
+        .GroupBy(skin => skin.SkinId)
+        .Select(group => group.First())
+        .ToArray();
+
+    public static bool IsCounted(OwnedSkin skin)
+    {
+        return IsCountedCanonical(Canonicalize(skin));
+    }
+
+    private static bool IsCountedCanonical(OwnedSkin skin)
+    {
+        if (skin.SkinId <= 0 || skin.ChampionId <= 0) return false;
+        if (skin.SkinId == skin.ChampionId * 1000) return false;
+
+        var name = skin.Name.Trim();
+        return !IsBaseName(name, "Classic")
+            && !IsBaseName(name, "Original")
+            && !IsBaseName(name, "Default");
+    }
+
+    private static bool IsBaseName(string name, string marker) =>
+        name.Equals(marker, StringComparison.OrdinalIgnoreCase)
+        || name.StartsWith($"{marker} ", StringComparison.OrdinalIgnoreCase);
+}

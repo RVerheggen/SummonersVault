@@ -54,13 +54,44 @@ public sealed class SecurityAndStorageTests
     {
         var account = new VaultAccount { LoginIdentifier = "learn-top", Label = "Top practice", Region = "EUW1", Roles = AccountRole.Top, Notes = "weakside" };
         account.Ranks.Add(new("RANKED_FLEX_SR", "SILVER", "I", 50, 1, 1)); account.Ranks.Add(new("RANKED_SOLO_5x5", "GOLD", "IV", 20, 2, 1));
-        account.Champions.Add(new(103, "Ahri")); account.Skins.Add(new(103001, 103, "Dynasty Ahri"));
+        account.Champions.Add(new(103, "Ahri")); account.Skins.Add(new(103000, 103, "Classic Ahri")); account.Skins.Add(new(103001, 103, "Dynasty Ahri"));
         Assert.Equal("GOLD", account.CardRank?.Tier);
         Assert.Single(AccountSearch.Apply([account], "dynasty weakside", AccountSort.Name));
         Assert.Single(AccountSearch.Apply([account], null, AccountSort.Name, new(Region: "EUW1", Queue: "RANKED_SOLO_5x5", Rank: "gold iv", Roles: AccountRole.Top, Champion: "ahri", Skin: "dynasty")));
         Assert.Empty(AccountSearch.Apply([account], null, AccountSort.Name, new(Queue: "RANKED_FLEX_SR", Rank: "gold")));
         Assert.Single(AccountSearch.Apply([account], null, AccountSort.Name, new(Roles: AccountRole.Top | AccountRole.Jungle)));
+        Assert.Empty(AccountSearch.Apply([account], null, AccountSort.Name, new(Skin: "classic")));
         Assert.Empty(AccountSearch.Apply([account], null, AccountSort.Name, new(Region: "NA")));
+    }
+
+    [Theory]
+    [InlineData(103000, 103, "Ahri", false)]
+    [InlineData(103999, 103, "Classic Ahri", false)]
+    [InlineData(103998, 103, "Original Ahri", false)]
+    [InlineData(103997, 103, "Default Ahri", false)]
+    [InlineData(103001, 103, "Dynasty Ahri", true)]
+    public void OwnedSkinRules_ExcludeBaseAndClassicSkins(int skinId, int championId, string name, bool expected) =>
+        Assert.Equal(expected, OwnedSkinRules.IsCounted(new(skinId, championId, name)));
+
+    [Fact]
+    public void OwnedSkinRules_NormalizeCanonicalizesAlternateNamespaceAndDeduplicates()
+    {
+        var normalized = OwnedSkinRules.Normalize([
+            new(19016, 19, "PROJECT: Warwick"),
+            new(60019016, 60019, "PROJECT: Warwick")
+        ]);
+
+        var skin = Assert.Single(normalized);
+        Assert.Equal(19016, skin.SkinId);
+        Assert.Equal(19, skin.ChampionId);
+        Assert.Equal("PROJECT: Warwick", skin.Name);
+    }
+
+    [Fact]
+    public void OwnedSkinRules_CanonicalizeDoesNotChangeUnrecognizedHighIds()
+    {
+        var skin = new OwnedSkin(70019016, 70019, "Future skin");
+        Assert.Equal(skin, OwnedSkinRules.Canonicalize(skin));
     }
 
     [Theory]
@@ -136,7 +167,7 @@ public sealed class SecurityAndStorageTests
             await using var repository = new EncryptedSqliteVaultRepository(paths);
             await repository.OpenAsync(key, create: true);
             var account = new VaultAccount { LoginIdentifier = "plaintext-login-marker", PasswordUtf8 = Encoding.UTF8.GetBytes("plaintext-password-marker"), Region = "EUW1", Roles = AccountRole.Mid | AccountRole.Support };
-            account.Champions.Add(new(1, "Annie")); await repository.SaveAccountAsync(account);
+            account.Champions.Add(new(1, "Annie")); account.Skins.Add(new(1000, 1, "Annie")); account.Skins.Add(new(1001, 1, "Goth Annie")); await repository.SaveAccountAsync(account);
             var newest = new DateTimeOffset(2026, 8, 5, 22, 30, 0, TimeSpan.Zero);
             await repository.ApplyLeagueSnapshotAsync(account.Id, Snapshot(MatchSnapshotResult.Known(newest, 42)));
             await repository.ApplyLeagueSnapshotAsync(account.Id, Snapshot(MatchSnapshotResult.Known(newest.AddDays(-1), 41)));
@@ -145,6 +176,7 @@ public sealed class SecurityAndStorageTests
             await repository.ApplyLeagueSnapshotAsync(account.Id, Snapshot(MatchSnapshotResult.Failed));
             loaded = await repository.GetAccountAsync(account.Id);
             Assert.Equal(MatchHistoryState.Stale, loaded?.MatchHistoryState); Assert.Equal(newest, loaded?.LastMatchPlayedAtUtc);
+            Assert.Equal("Goth Annie", Assert.Single(loaded!.Skins).Name);
             await repository.CloseAsync();
             var bytes = await File.ReadAllBytesAsync(paths.DatabasePath); var text = Encoding.UTF8.GetString(bytes);
             Assert.DoesNotContain("plaintext-login-marker", text, StringComparison.Ordinal); Assert.DoesNotContain("plaintext-password-marker", text, StringComparison.Ordinal);
