@@ -39,6 +39,7 @@ public sealed partial class MainViewModel(
     [ObservableProperty] private string statusMessage = "Preparing your vault…";
     [ObservableProperty] private bool isBusy;
     [ObservableProperty] private string clientStatus = "League Client not checked";
+    [ObservableProperty] private bool isClientConnected;
     [ObservableProperty] private AppSettings settings = new();
     public ObservableCollection<AccountCardViewModel> Accounts { get; } = [];
     public IBackupService Backup => backup;
@@ -101,6 +102,7 @@ public sealed partial class MainViewModel(
         State = ShellState.Locked;
         StatusMessage = "Vault locked";
         ClientStatus = "Monitoring paused while locked";
+        IsClientConnected = false;
         _pendingLeagueAccountId = null;
     }
 
@@ -160,6 +162,7 @@ public sealed partial class MainViewModel(
         {
             var status = await league.GetStatusAsync();
             ClientStatus = status.Message;
+            IsClientConnected = status.IsLoggedIn;
             if (status.IsLoggedIn && _pendingLeagueAccountId is { } accountId && !_pendingSignInNotified)
             {
                 _pendingSignInNotified = true;

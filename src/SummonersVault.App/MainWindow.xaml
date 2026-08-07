@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:SummonersVault.App.ViewModels"
         xmlns:conv="clr-namespace:SummonersVault.App.Converters"
-        Title="SummonersVault" Width="1180" Height="760" MinWidth="900" MinHeight="620"
+        Title="SummonersVault" Width="1280" Height="760" MinWidth="1100" MinHeight="620"
         WindowStartupLocation="CenterScreen" Style="{StaticResource AppWindow}">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolVisibility"/>
@@ -11,6 +11,10 @@
         <conv:ZeroToVisibilityConverter x:Key="ZeroVisibility"/>
         <Style x:Key="FilterLabel" TargetType="TextBlock" BasedOn="{StaticResource MutedText}">
             <Setter Property="FontSize" Value="11"/><Setter Property="Margin" Value="2,0,0,5"/>
+        </Style>
+        <Style x:Key="ClientStatusDot" TargetType="Ellipse">
+            <Setter Property="Fill" Value="{StaticResource DangerBrush}"/>
+            <Style.Triggers><DataTrigger Binding="{Binding IsClientConnected}" Value="True"><Setter Property="Fill" Value="{StaticResource SuccessBrush}"/></DataTrigger></Style.Triggers>
         </Style>
         <DataTemplate x:Key="AuthBrand">
             <Border Style="{StaticResource Panel}" Padding="42" Margin="0,0,28,0">
@@ -82,7 +86,7 @@
                         <Button Style="{StaticResource SidebarButton}" AutomationProperties.Name="Import or export" Click="Backup_Click"><StackPanel Orientation="Horizontal"><TextBlock Text="⇅" Width="26" TextAlignment="Center"/><TextBlock Text="Import / Export"/></StackPanel></Button>
                         <Button Style="{StaticResource SidebarButton}" AutomationProperties.Name="About" Click="About_Click"><StackPanel Orientation="Horizontal"><TextBlock Text="ⓘ" Width="26" TextAlignment="Center"/><TextBlock Text="About"/></StackPanel></Button>
                     </StackPanel>
-                    <StackPanel Grid.Row="2"><TextBlock Text="●  LEAGUE CLIENT" Foreground="{StaticResource HighlightBrush}" FontSize="11" FontWeight="SemiBold"/><TextBlock Text="{Binding ClientStatus}" Style="{StaticResource MutedText}" FontSize="12" Margin="0,4,0,12" AutomationProperties.LiveSetting="Polite"/><Button Content="Lock vault" Click="Lock_Click"/></StackPanel>
+                    <StackPanel Grid.Row="2"><StackPanel Orientation="Horizontal"><Ellipse Width="7" Height="7" Style="{StaticResource ClientStatusDot}" Margin="0,0,7,0" VerticalAlignment="Center" AutomationProperties.Name="League Client connection indicator"/><TextBlock Text="LEAGUE CLIENT" Foreground="{StaticResource HighlightBrush}" FontSize="11" FontWeight="SemiBold"/></StackPanel><TextBlock Text="{Binding ClientStatus}" Style="{StaticResource MutedText}" FontSize="12" Margin="0,4,0,12" AutomationProperties.LiveSetting="Polite"/><Button Content="Lock vault" Click="Lock_Click"/></StackPanel>
                 </Grid>
             </Border>
 
