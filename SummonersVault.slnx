@@ -1,0 +1,9 @@
+<Solution>
+  <Project Path="src/SummonersVault.Core/SummonersVault.Core.csproj" />
+  <Project Path="src/SummonersVault.Infrastructure/SummonersVault.Infrastructure.csproj" />
+  <Project Path="src/SummonersVault.App/SummonersVault.App.csproj">
+    <Platform Solution="Debug|*" Project="x64" />
+  </Project>
+  <Project Path="tests/SummonersVault.Tests/SummonersVault.Tests.csproj" />
+</Solution>
+

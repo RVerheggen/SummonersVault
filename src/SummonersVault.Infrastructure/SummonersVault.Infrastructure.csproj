@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SummonersVault.Core\SummonersVault.Core.csproj" />
+    <PackageReference Include="Microsoft.Data.Sqlite.Core" />
+    <PackageReference Include="NSec.Cryptography" />
+    <PackageReference Include="SQLite3MC.PCLRaw.bundle" />
+  </ItemGroup>
+</Project>
+
