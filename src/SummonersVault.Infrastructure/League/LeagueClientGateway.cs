@@ -1,6 +1,6 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Net.Http.Headers;
-using System.Net.Security;
 using System.Text;
 using System.Text.Json;
 using SummonersVault.Core.Abstractions;
@@ -10,7 +10,6 @@ namespace SummonersVault.Infrastructure.League;
 
 public sealed class LeagueClientGateway : ILeagueClientGateway
 {
-    private static readonly string DefaultInstallDirectory = Path.Combine(Environment.GetEnvironmentVariable("SystemDrive") ?? "C:", "Riot Games", "League of Legends");
     private string? _configuredInstallDirectory;
 
     public void SetConfiguredInstallDirectory(string? directory) => _configuredInstallDirectory = directory;
@@ -28,6 +27,7 @@ public sealed class LeagueClientGateway : ILeagueClientGateway
                 : new(true, false, "League Client is waiting for sign-in");
         }
         catch (HttpRequestException) { return new(true, false, "League Client is starting"); }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested) { return new(true, false, "League Client is starting"); }
     }
 
     public async Task<LeagueSnapshot> FetchCurrentSnapshotAsync(CancellationToken cancellationToken = default)
@@ -74,21 +74,28 @@ public sealed class LeagueClientGateway : ILeagueClientGateway
     {
         cancellationToken.ThrowIfCancellationRequested();
         _configuredInstallDirectory = configuredInstallDirectory ?? _configuredInstallDirectory;
-        var executable = CandidateDirectories().Select(x => Path.Combine(x, "LeagueClient.exe")).FirstOrDefault(File.Exists);
+        var executable = CandidateRiotClientExecutables().FirstOrDefault(File.Exists);
         if (executable is null) return Task.FromResult(false);
-        Process.Start(new ProcessStartInfo(executable) { UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(executable)! });
-        return Task.FromResult(true);
+        try
+        {
+            Process.Start(LeagueInstallationLocator.CreateLaunchStartInfo(executable));
+            return Task.FromResult(true);
+        }
+        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException)
+        {
+            return Task.FromResult(false);
+        }
     }
 
     private async Task<LeagueLockfile?> FindLockfileAsync(CancellationToken cancellationToken)
     {
-        foreach (var directory in CandidateDirectories())
+        foreach (var directory in CandidateLeagueDirectories())
         {
             var path = Path.Combine(directory, "lockfile");
             if (!File.Exists(path)) continue;
             try
             {
-                var content = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
+                var content = await ReadLockfileAsync(path, cancellationToken).ConfigureAwait(false);
                 if (LeagueLockfile.TryParse(content, out var lockfile)) return lockfile;
             }
             catch (IOException) { }
@@ -97,19 +104,44 @@ public sealed class LeagueClientGateway : ILeagueClientGateway
         return null;
     }
 
-    private IEnumerable<string> CandidateDirectories()
+    internal static async Task<string> ReadLockfileAsync(string path, CancellationToken cancellationToken = default)
     {
-        if (!string.IsNullOrWhiteSpace(_configuredInstallDirectory)) yield return _configuredInstallDirectory;
-        yield return DefaultInstallDirectory;
-        Process[] processes = [];
-        try { processes = Process.GetProcessesByName("LeagueClient"); } catch (InvalidOperationException) { }
-        foreach (var process in processes)
+        await using var stream = new FileStream(
+            path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete,
+            bufferSize: 256,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: false);
+        return await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private IReadOnlyList<string> CandidateLeagueDirectories() => LeagueInstallationLocator.GetLeagueDirectories(
+        _configuredInstallDirectory,
+        LeagueInstallationLocator.DefaultRiotGamesDirectory,
+        GetRunningExecutablePaths("LeagueClient", "LeagueClientUx"));
+
+    private IReadOnlyList<string> CandidateRiotClientExecutables() => LeagueInstallationLocator.GetRiotClientExecutables(
+        _configuredInstallDirectory,
+        LeagueInstallationLocator.DefaultRiotGamesDirectory,
+        GetRunningExecutablePaths("RiotClientServices"));
+
+    private static IEnumerable<string> GetRunningExecutablePaths(params string[] processNames)
+    {
+        foreach (var processName in processNames)
         {
-            using (process)
+            Process[] processes = [];
+            try { processes = Process.GetProcessesByName(processName); } catch (InvalidOperationException) { }
+            foreach (var process in processes)
             {
-                string? path = null;
-                try { path = process.MainModule?.FileName; } catch { }
-                if (path is not null) yield return Path.GetDirectoryName(path)!;
+                using (process)
+                {
+                    string? path = null;
+                    try { path = process.MainModule?.FileName; }
+                    catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or NotSupportedException) { }
+                    if (!string.IsNullOrWhiteSpace(path)) yield return path;
+                }
             }
         }
     }
@@ -118,13 +150,15 @@ public sealed class LeagueClientGateway : ILeagueClientGateway
     {
         var handler = new HttpClientHandler
         {
-            ServerCertificateCustomValidationCallback = (request, _, _, errors) =>
-                request.RequestUri is { IsLoopback: true, Host: "127.0.0.1" } && errors is (SslPolicyErrors.None or SslPolicyErrors.RemoteCertificateChainErrors)
+            ServerCertificateCustomValidationCallback = (request, _, _, _) => IsLeagueLoopbackRequest(request.RequestUri)
         };
         var client = new HttpClient(handler) { BaseAddress = lockfile.BaseUri, Timeout = TimeSpan.FromSeconds(12) };
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes($"riot:{lockfile.Password}")));
         return client;
     }
+
+    internal static bool IsLeagueLoopbackRequest(Uri? uri) =>
+        uri is { IsLoopback: true, Host: "127.0.0.1", Scheme: "https" };
 
     private static async Task<IReadOnlyList<RankSnapshot>?> FetchRanksAsync(HttpClient client, CancellationToken cancellationToken)
     {
@@ -180,6 +214,7 @@ public sealed class LeagueClientGateway : ILeagueClientGateway
             return await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
         catch (HttpRequestException) { return null; }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested) { return null; }
         catch (JsonException) { return null; }
     }
 

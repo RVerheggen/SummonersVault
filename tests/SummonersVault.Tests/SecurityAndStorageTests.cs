@@ -68,6 +68,50 @@ public sealed class SecurityAndStorageTests
     [InlineData("", false)]
     public void LockfileParser_ValidatesInput(string value, bool expected) => Assert.Equal(expected, LeagueLockfile.TryParse(value, out _));
 
+    [Fact]
+    public void LeagueInstallationDiscovery_MapsRiotAndLeagueFoldersAndLaunchArguments()
+    {
+        var riotGames = Path.Combine(Path.GetTempPath(), "Riot Games");
+        var leagueDirectory = Path.Combine(riotGames, "League of Legends");
+        var riotClientExecutable = Path.Combine(riotGames, "Riot Client", "RiotClientServices.exe");
+
+        Assert.Contains(leagueDirectory, LeagueInstallationLocator.GetLeagueDirectories(riotClientExecutable, riotGames), StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(riotClientExecutable, LeagueInstallationLocator.GetRiotClientExecutables(leagueDirectory, riotGames), StringComparer.OrdinalIgnoreCase);
+
+        var startInfo = LeagueInstallationLocator.CreateLaunchStartInfo(riotClientExecutable);
+        Assert.Equal(riotClientExecutable, startInfo.FileName);
+        Assert.Equal(["--launch-product=league_of_legends", "--launch-patchline=live"], startInfo.ArgumentList);
+        Assert.True(Path.IsPathRooted(LeagueInstallationLocator.DefaultRiotGamesDirectory));
+    }
+
+    [Fact]
+    public void LeagueInstallationDiscovery_UsesLeagueClientUxAndLimitsCertificateBypassToHttpsLoopback()
+    {
+        var riotGames = Path.Combine(Path.GetTempPath(), "Riot Games");
+        var discoveredDirectory = Path.Combine(Path.GetTempPath(), "Custom League");
+        var clientUx = Path.Combine(discoveredDirectory, "LeagueClientUx.exe");
+
+        Assert.Contains(discoveredDirectory, LeagueInstallationLocator.GetLeagueDirectories(null, riotGames, [clientUx]), StringComparer.OrdinalIgnoreCase);
+        Assert.True(LeagueClientGateway.IsLeagueLoopbackRequest(new Uri("https://127.0.0.1:12345/")));
+        Assert.False(LeagueClientGateway.IsLeagueLoopbackRequest(new Uri("https://localhost:12345/")));
+        Assert.False(LeagueClientGateway.IsLeagueLoopbackRequest(new Uri("http://127.0.0.1:12345/")));
+        Assert.False(LeagueClientGateway.IsLeagueLoopbackRequest(new Uri("https://example.com/")));
+    }
+
+    [Fact]
+    public async Task LeagueLockfileReader_AllowsTheClientToKeepItsWriteHandleOpen()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            await File.WriteAllTextAsync(path, "LeagueClient:1234:2999:secret:https");
+            await using var clientHandle = new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.Read);
+            await Assert.ThrowsAsync<IOException>(() => File.ReadAllTextAsync(path));
+            Assert.Equal("LeagueClient:1234:2999:secret:https", await LeagueClientGateway.ReadLockfileAsync(path));
+        }
+        finally { File.Delete(path); }
+    }
+
     [Theory]
     [InlineData("{\"games\":{\"games\":[{\"gameId\":7,\"gameCreation\":1785969000000}]}}", true, 7)]
     [InlineData("{\"games\":[{\"gameId\":8,\"gameCreationDate\":\"2026-08-05T22:30:00Z\"}]}", true, 8)]

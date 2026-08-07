@@ -22,7 +22,7 @@ public partial class SettingsWindow : Window
 
     private void Browse_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new OpenFolderDialog { Title = "Select League of Legends folder", Multiselect = false };
+        var dialog = new OpenFolderDialog { Title = "Select Riot Games installation folder", Multiselect = false };
         if (dialog.ShowDialog(this) == true) LeaguePath.Text = dialog.FolderName;
     }
 

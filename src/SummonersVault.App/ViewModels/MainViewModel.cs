@@ -25,6 +25,7 @@ public sealed partial class MainViewModel(
     private CancellationTokenSource? _searchDelay;
     private Guid? _pendingLeagueAccountId;
     private bool _pendingSignInNotified;
+    private bool _clientStatusUpdateInProgress;
 
     [ObservableProperty] private ShellState state;
     [ObservableProperty] private string query = string.Empty;
@@ -148,19 +149,25 @@ public sealed partial class MainViewModel(
         _pendingLeagueAccountId = accountId;
         _pendingSignInNotified = false;
         var launched = await league.LaunchAsync(Settings.LeagueInstallDirectory);
-        StatusMessage = launched ? "League Client launched — sign in, then choose Sync" : "League installation was not found. Set its folder in Settings.";
+        StatusMessage = launched ? "Riot Client launched — sign in and this account will sync automatically" : "Riot Client installation was not found. Set its folder in Settings.";
     }
 
     public async Task UpdateClientStatusAsync()
     {
-        if (!IsVault) return;
-        var status = await league.GetStatusAsync();
-        ClientStatus = status.Message;
-        if (status.IsLoggedIn && _pendingLeagueAccountId.HasValue && !_pendingSignInNotified)
+        if (!IsVault || _clientStatusUpdateInProgress) return;
+        _clientStatusUpdateInProgress = true;
+        try
         {
-            _pendingSignInNotified = true;
-            StatusMessage = "League sign-in detected — choose Sync on the selected account";
+            var status = await league.GetStatusAsync();
+            ClientStatus = status.Message;
+            if (status.IsLoggedIn && _pendingLeagueAccountId is { } accountId && !_pendingSignInNotified)
+            {
+                _pendingSignInNotified = true;
+                StatusMessage = "League sign-in detected — synchronizing the selected account…";
+                await SyncAsync(accountId);
+            }
         }
+        finally { _clientStatusUpdateInProgress = false; }
     }
 
     public async Task SyncAsync(Guid accountId)
@@ -177,7 +184,7 @@ public sealed partial class MainViewModel(
             await RefreshAsync();
             StatusMessage = "League profile synchronized";
         }
-        catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or HttpRequestException) { StatusMessage = ex.Message; }
+        catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or HttpRequestException or TaskCanceledException) { StatusMessage = ex.Message; }
         finally { IsBusy = false; }
     }
 

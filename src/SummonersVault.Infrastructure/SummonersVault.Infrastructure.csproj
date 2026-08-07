@@ -8,5 +8,7 @@
     <PackageReference Include="NSec.Cryptography" />
     <PackageReference Include="SQLite3MC.PCLRaw.bundle" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="SummonersVault.Tests" />
+  </ItemGroup>
 </Project>
-
