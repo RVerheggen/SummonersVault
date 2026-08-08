@@ -8,4 +8,4 @@ Before changing any user interface, read and follow `docs/ui-style-guide.md` in 
 - Keep animation near 150 ms and disable nonessential motion when Windows client-area animation is disabled.
 - Never log, serialize to diagnostics, or transmit account passwords, master-password material, database keys, or League Client lockfile tokens.
 - The League Client integration is read-only. Do not add POST, PUT, PATCH, or DELETE calls.
-
+- Do not use em dashes in source code, UI copy, documentation, comments, or commit messages. Use a standard hyphen (`-`) when punctuation is needed.

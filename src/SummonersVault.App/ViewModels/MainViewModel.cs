@@ -151,14 +151,14 @@ public sealed partial class MainViewModel(
         var account = await session.Repository.GetAccountAsync(accountId);
         if (account is null) return;
         clipboard.Copy(account.LoginIdentifier);
-        StatusMessage = "Username copied — clipboard clears in 30 seconds";
+        StatusMessage = "Username copied - clipboard clears in 30 seconds";
     }
 
     public async Task CopyPasswordAsync(Guid accountId)
     {
         var account = await session.Repository.GetAccountAsync(accountId, includePassword: true);
         if (account is null) return;
-        try { clipboard.Copy(System.Text.Encoding.UTF8.GetString(account.PasswordUtf8)); StatusMessage = "Password copied — clipboard clears in 30 seconds"; }
+        try { clipboard.Copy(System.Text.Encoding.UTF8.GetString(account.PasswordUtf8)); StatusMessage = "Password copied - clipboard clears in 30 seconds"; }
         finally { CryptographicOperations.ZeroMemory(account.PasswordUtf8); }
     }
 
@@ -167,7 +167,7 @@ public sealed partial class MainViewModel(
         _pendingLeagueAccountId = accountId;
         _pendingSignInNotified = false;
         var launched = await league.LaunchAsync(Settings.LeagueInstallDirectory);
-        StatusMessage = launched ? "Riot Client launched — sign in and this account will sync automatically" : "Riot Client installation was not found. Set its folder in Settings.";
+        StatusMessage = launched ? "Riot Client launched - sign in and this account will sync automatically" : "Riot Client installation was not found. Set its folder in Settings.";
     }
 
     public async Task UpdateClientStatusAsync()
@@ -184,7 +184,7 @@ public sealed partial class MainViewModel(
                 if (!_pendingSignInNotified)
                 {
                     _pendingSignInNotified = true;
-                    StatusMessage = "League sign-in detected — synchronizing the selected account…";
+                    StatusMessage = "League sign-in detected - synchronizing the selected account…";
                 }
 
                 try
@@ -198,7 +198,7 @@ public sealed partial class MainViewModel(
                     }
                     else
                     {
-                        StatusMessage = "League profile linked — waiting for champion and skin inventory…";
+                        StatusMessage = "League profile linked - waiting for champion and skin inventory…";
                     }
                 }
                 catch (LeagueIdentityConflictException ex)
@@ -216,8 +216,9 @@ public sealed partial class MainViewModel(
         finally { _clientStatusUpdateInProgress = false; }
     }
 
-    public async Task SyncAsync(Guid accountId)
+    public async Task<string?> SyncAsync(Guid accountId)
     {
+        string? errorMessage = null;
         try
         {
             IsBusy = true;
@@ -231,23 +232,41 @@ public sealed partial class MainViewModel(
             else
             {
                 StatusMessage = _pendingLeagueAccountId == accountId
-                    ? "League profile linked — inventory is still loading and automatic synchronization will retry."
+                    ? "League profile linked - inventory is still loading and automatic synchronization will retry."
                     : "League profile synchronized, but inventory is still loading. Try again shortly.";
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or HttpRequestException or TaskCanceledException) { StatusMessage = ex.Message; }
+        catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or HttpRequestException or TaskCanceledException)
+        {
+            errorMessage = ex.Message;
+            StatusMessage = errorMessage;
+        }
         finally { IsBusy = false; }
+        return errorMessage;
     }
 
     private async Task<bool> SynchronizeAccountAsync(Guid accountId)
     {
         var snapshot = await league.FetchCurrentSnapshotAsync();
+        var target = _accounts.FirstOrDefault(x => x.Id == accountId)
+            ?? throw new InvalidOperationException("The selected vault account no longer exists.");
+        if (!LeagueIdentityRules.MatchesLinkedAccount(target, snapshot.Puuid))
+        {
+            var signedInRiotId = FormatRiotId(snapshot.RiotGameName, snapshot.RiotTagLine, "the current League profile");
+            var linkedRiotId = FormatRiotId(target.RiotGameName, target.RiotTagLine, "another League profile");
+            throw new LeagueIdentityConflictException($"The signed-in League account ({signedInRiotId}) does not match {target.DisplayName}, which is linked to {linkedRiotId}. Sign in to the matching League account and try again.");
+        }
         var existing = _accounts.FirstOrDefault(x => string.Equals(x.Puuid, snapshot.Puuid, StringComparison.Ordinal) && x.Id != accountId);
         if (existing is not null) throw new LeagueIdentityConflictException($"That League profile is already linked to {existing.DisplayName}.");
         await session.Repository.ApplyLeagueSnapshotAsync(accountId, snapshot);
         await RefreshAsync();
         return snapshot.HasCompleteInventory;
     }
+
+    private static string FormatRiotId(string? gameName, string? tagLine, string fallback) =>
+        string.IsNullOrWhiteSpace(gameName)
+            ? fallback
+            : string.IsNullOrWhiteSpace(tagLine) ? gameName : $"{gameName}#{tagLine}";
 
     public async Task SaveSettingsAsync(AppSettings updated)
     {

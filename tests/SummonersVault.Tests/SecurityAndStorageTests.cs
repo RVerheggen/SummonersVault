@@ -64,6 +64,17 @@ public sealed class SecurityAndStorageTests
         Assert.Empty(AccountSearch.Apply([account], null, AccountSort.Name, new(Region: "NA")));
     }
 
+    [Fact]
+    public void LeagueIdentityRules_AllowFirstLinkAndRejectADifferentLinkedProfile()
+    {
+        var account = new VaultAccount { LoginIdentifier = "player", Region = "EUW1" };
+        Assert.True(LeagueIdentityRules.MatchesLinkedAccount(account, "signed-in-puuid"));
+
+        account.Puuid = "linked-puuid";
+        Assert.True(LeagueIdentityRules.MatchesLinkedAccount(account, "linked-puuid"));
+        Assert.False(LeagueIdentityRules.MatchesLinkedAccount(account, "different-puuid"));
+    }
+
     [Theory]
     [InlineData(103000, 103, "Ahri", false)]
     [InlineData(103999, 103, "Classic Ahri", false)]

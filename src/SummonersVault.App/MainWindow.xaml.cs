@@ -57,7 +57,13 @@ public partial class MainWindow : Window
     private async void CopyLogin_Click(object sender, RoutedEventArgs e) { if (TryGetId(sender, out var id)) await _viewModel.CopyLoginAsync(id); }
     private async void CopyPassword_Click(object sender, RoutedEventArgs e) { if (TryGetId(sender, out var id)) await _viewModel.CopyPasswordAsync(id); }
     private async void Launch_Click(object sender, RoutedEventArgs e) { if (TryGetId(sender, out var id)) await _viewModel.LaunchAsync(id); }
-    private async void Sync_Click(object sender, RoutedEventArgs e) { if (TryGetId(sender, out var id)) await _viewModel.SyncAsync(id); }
+    private async void Sync_Click(object sender, RoutedEventArgs e)
+    {
+        if (!TryGetId(sender, out var id)) return;
+        var error = await _viewModel.SyncAsync(id);
+        if (!string.IsNullOrWhiteSpace(error))
+            MessageBox.Show(this, error, "Unable to sync account", MessageBoxButton.OK, MessageBoxImage.Warning);
+    }
     private void SuggestionFilter_PreviewTextInput(object sender, TextCompositionEventArgs e) { if (sender is ComboBox comboBox && comboBox.Items.Count > 0) comboBox.IsDropDownOpen = true; }
     private void ClearFilters_Click(object sender, RoutedEventArgs e) => _viewModel.ClearFilters();
     private void Sort_SelectionChanged(object sender, SelectionChangedEventArgs e) { if (_viewModel is not null) _viewModel.SortRecentlyPlayed = ((ComboBox)sender).SelectedIndex == 1; }
