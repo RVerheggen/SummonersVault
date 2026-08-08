@@ -39,6 +39,7 @@ public sealed class LeagueClientGateway : ILeagueClientGateway
         var root = summoner.RootElement;
         var puuid = GetString(root, "puuid") ?? throw new InvalidDataException("League Client did not return a PUUID.");
         var summonerId = GetInt64(root, "summonerId");
+        var summonerLevel = GetInt32(root, "summonerLevel");
         var riotName = GetString(root, "gameName") ?? GetString(root, "displayName") ?? "Unknown";
         var tag = GetString(root, "tagLine") ?? string.Empty;
         var iconId = GetInt32(root, "profileIconId");
@@ -65,7 +66,7 @@ public sealed class LeagueClientGateway : ILeagueClientGateway
         return new LeagueSnapshot
         {
             Puuid = puuid, SummonerId = summonerId, RiotGameName = riotName, RiotTagLine = tag, Region = region,
-            ProfileIconId = iconId, ProfileIconBytes = icon, SummonerLevel = GetInt32(root, "summonerLevel"),
+            ProfileIconId = iconId, ProfileIconBytes = icon, SummonerLevel = summonerLevel,
             Ranks = ranks, Champions = champions, Skins = skins, Match = match
         };
     }
@@ -160,6 +161,9 @@ public sealed class LeagueClientGateway : ILeagueClientGateway
     internal static bool IsLeagueLoopbackRequest(Uri? uri) =>
         uri is { IsLoopback: true, Host: "127.0.0.1", Scheme: "https" };
 
+    internal static bool IsInventoryPayloadReady(JsonElement element) =>
+        element.ValueKind == JsonValueKind.Array && element.GetArrayLength() > 0;
+
     private static async Task<IReadOnlyList<RankSnapshot>?> FetchRanksAsync(HttpClient client, CancellationToken cancellationToken)
     {
         using var json = await TryGetJsonAsync(client, "lol-ranked/v1/current-ranked-stats", cancellationToken).ConfigureAwait(false);
@@ -180,14 +184,14 @@ public sealed class LeagueClientGateway : ILeagueClientGateway
     private static async Task<IReadOnlyList<OwnedChampion>?> FetchChampionsAsync(HttpClient client, long summonerId, CancellationToken cancellationToken)
     {
         using var json = await TryGetJsonAsync(client, $"lol-champions/v1/inventories/{summonerId}/champions-minimal", cancellationToken).ConfigureAwait(false);
-        if (json is null || json.RootElement.ValueKind != JsonValueKind.Array) return null;
+        if (json is null || !IsInventoryPayloadReady(json.RootElement)) return null;
         return json.RootElement.EnumerateArray().Where(IsOwned).Select(x => new OwnedChampion(GetInt32(x, "id") ?? 0, GetString(x, "name") ?? "Unknown champion")).Where(x => x.ChampionId > 0).ToArray();
     }
 
     private static async Task<IReadOnlyList<OwnedSkin>?> FetchSkinsAsync(HttpClient client, long summonerId, CancellationToken cancellationToken)
     {
         using var json = await TryGetJsonAsync(client, $"lol-champions/v1/inventories/{summonerId}/skins-minimal", cancellationToken).ConfigureAwait(false);
-        if (json is null || json.RootElement.ValueKind != JsonValueKind.Array) return null;
+        if (json is null || !IsInventoryPayloadReady(json.RootElement)) return null;
         var skins = json.RootElement.EnumerateArray()
             .Where(IsOwned)
             .Where(x => GetBoolean(x, "isBase") != true)

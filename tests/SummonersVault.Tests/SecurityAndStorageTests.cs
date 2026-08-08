@@ -131,6 +131,28 @@ public sealed class SecurityAndStorageTests
         Assert.False(LeagueClientGateway.IsLeagueLoopbackRequest(new Uri("https://example.com/")));
     }
 
+    [Theory]
+    [InlineData("[]", false)]
+    [InlineData("[{}]", true)]
+    [InlineData("{}", false)]
+    public void InventoryReadiness_RequiresAPopulatedCatalog(string json, bool expected)
+    {
+        using var document = System.Text.Json.JsonDocument.Parse(json);
+        Assert.Equal(expected, LeagueClientGateway.IsInventoryPayloadReady(document.RootElement));
+    }
+
+    [Fact]
+    public void LeagueSnapshot_RequiresBothInventoryCategoriesToBeComplete()
+    {
+        var snapshot = Snapshot(MatchSnapshotResult.Failed);
+        Assert.False(snapshot.HasCompleteInventory);
+        Assert.True(new LeagueSnapshot
+        {
+            Puuid = "puuid", RiotGameName = "Player", RiotTagLine = "EUW", Region = "EUW1",
+            Champions = [], Skins = []
+        }.HasCompleteInventory);
+    }
+
     [Fact]
     public async Task LeagueLockfileReader_AllowsTheClientToKeepItsWriteHandleOpen()
     {

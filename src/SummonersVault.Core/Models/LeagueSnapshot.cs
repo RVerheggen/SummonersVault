@@ -14,6 +14,7 @@ public sealed class LeagueSnapshot
     public IReadOnlyList<OwnedChampion>? Champions { get; init; }
     public IReadOnlyList<OwnedSkin>? Skins { get; init; }
     public MatchSnapshotResult Match { get; init; } = MatchSnapshotResult.Failed;
+    public bool HasCompleteInventory => Champions is not null && Skins is not null;
 }
 
 public sealed record MatchSnapshotResult(bool Succeeded, bool HasMatch, DateTimeOffset? PlayedAtUtc, long? MatchId)
@@ -24,4 +25,3 @@ public sealed record MatchSnapshotResult(bool Succeeded, bool HasMatch, DateTime
 }
 
 public sealed record LeagueClientStatus(bool IsRunning, bool IsLoggedIn, string Message);
-

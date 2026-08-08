@@ -179,11 +179,38 @@ public sealed partial class MainViewModel(
             var status = await league.GetStatusAsync();
             ClientStatus = status.Message;
             IsClientConnected = status.IsLoggedIn;
-            if (status.IsLoggedIn && _pendingLeagueAccountId is { } accountId && !_pendingSignInNotified)
+            if (status.IsLoggedIn && _pendingLeagueAccountId is { } accountId)
             {
-                _pendingSignInNotified = true;
-                StatusMessage = "League sign-in detected — synchronizing the selected account…";
-                await SyncAsync(accountId);
+                if (!_pendingSignInNotified)
+                {
+                    _pendingSignInNotified = true;
+                    StatusMessage = "League sign-in detected — synchronizing the selected account…";
+                }
+
+                try
+                {
+                    IsBusy = true;
+                    var inventoryComplete = await SynchronizeAccountAsync(accountId);
+                    if (inventoryComplete)
+                    {
+                        _pendingLeagueAccountId = null;
+                        StatusMessage = "League profile synchronized";
+                    }
+                    else
+                    {
+                        StatusMessage = "League profile linked — waiting for champion and skin inventory…";
+                    }
+                }
+                catch (LeagueIdentityConflictException ex)
+                {
+                    _pendingLeagueAccountId = null;
+                    StatusMessage = ex.Message;
+                }
+                catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or HttpRequestException or TaskCanceledException)
+                {
+                    StatusMessage = "Automatic synchronization will retry when League is ready.";
+                }
+                finally { IsBusy = false; }
             }
         }
         finally { _clientStatusUpdateInProgress = false; }
@@ -195,16 +222,31 @@ public sealed partial class MainViewModel(
         {
             IsBusy = true;
             StatusMessage = "Reading the signed-in League account…";
-            var snapshot = await league.FetchCurrentSnapshotAsync();
-            var existing = _accounts.FirstOrDefault(x => string.Equals(x.Puuid, snapshot.Puuid, StringComparison.Ordinal) && x.Id != accountId);
-            if (existing is not null) throw new InvalidOperationException($"That League profile is already linked to {existing.DisplayName}.");
-            await session.Repository.ApplyLeagueSnapshotAsync(accountId, snapshot);
-            if (_pendingLeagueAccountId == accountId) _pendingLeagueAccountId = null;
-            await RefreshAsync();
-            StatusMessage = "League profile synchronized";
+            var inventoryComplete = await SynchronizeAccountAsync(accountId);
+            if (inventoryComplete)
+            {
+                if (_pendingLeagueAccountId == accountId) _pendingLeagueAccountId = null;
+                StatusMessage = "League profile synchronized";
+            }
+            else
+            {
+                StatusMessage = _pendingLeagueAccountId == accountId
+                    ? "League profile linked — inventory is still loading and automatic synchronization will retry."
+                    : "League profile synchronized, but inventory is still loading. Try again shortly.";
+            }
         }
         catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or HttpRequestException or TaskCanceledException) { StatusMessage = ex.Message; }
         finally { IsBusy = false; }
+    }
+
+    private async Task<bool> SynchronizeAccountAsync(Guid accountId)
+    {
+        var snapshot = await league.FetchCurrentSnapshotAsync();
+        var existing = _accounts.FirstOrDefault(x => string.Equals(x.Puuid, snapshot.Puuid, StringComparison.Ordinal) && x.Id != accountId);
+        if (existing is not null) throw new LeagueIdentityConflictException($"That League profile is already linked to {existing.DisplayName}.");
+        await session.Repository.ApplyLeagueSnapshotAsync(accountId, snapshot);
+        await RefreshAsync();
+        return snapshot.HasCompleteInventory;
     }
 
     public async Task SaveSettingsAsync(AppSettings updated)
@@ -313,6 +355,8 @@ public sealed partial class MainViewModel(
         await session.DisposeAsync();
     }
 }
+
+file sealed class LeagueIdentityConflictException(string message) : InvalidOperationException(message);
 
 public sealed class AccountCardViewModel(VaultAccount account)
 {
