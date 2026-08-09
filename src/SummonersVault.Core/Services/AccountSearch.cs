@@ -20,6 +20,7 @@ public static class AccountSearch
     {
         if (filter is null) return true;
         var comparison = StringComparison.CurrentCultureIgnoreCase;
+        var regionFilter = LeagueRegion.Normalize(filter.Region);
         var rankFilter = filter.Rank?.Trim();
         var championFilter = filter.Champion?.Trim();
         var skinFilter = filter.Skin?.Trim();
@@ -33,7 +34,7 @@ public static class AccountSearch
             rankMatches = account.Ranks.Any(rank =>
                 (string.IsNullOrWhiteSpace(filter.Queue) || rank.QueueType.Equals(filter.Queue, comparison))
                 && (string.IsNullOrWhiteSpace(rankFilter) || $"{rank.Tier} {rank.Division}".Contains(rankFilter, comparison)));
-        return (string.IsNullOrWhiteSpace(filter.Region) || account.Region.Equals(filter.Region, comparison))
+        return (string.IsNullOrWhiteSpace(regionFilter) || LeagueRegion.Normalize(account.Region).Equals(regionFilter, comparison))
             && rankMatches
             && (filter.Roles == AccountRole.None || (account.Roles & filter.Roles) != AccountRole.None)
             && (string.IsNullOrWhiteSpace(championFilter) || account.Champions.Any(x => x.Name.Contains(championFilter, comparison)))

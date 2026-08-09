@@ -306,7 +306,7 @@ public sealed partial class MainViewModel(
     {
         Accounts.Clear();
         var syncState = SyncFilterIndex switch { 1 => MatchHistoryState.Known, 2 => MatchHistoryState.NeverPlayed, 3 => MatchHistoryState.Unknown, 4 => MatchHistoryState.Stale, _ => (MatchHistoryState?)null };
-        var region = RegionFilterIndex switch { 1 => "EUW1", 2 => "EUN1", 3 => "NA1", 4 => "KR", 5 => "BR1", 6 => "JP1", 7 => "LA1", 8 => "LA2", 9 => "OC1", 10 => "TR1", _ => null };
+        var region = RegionFilterIndex switch { 1 => "EUW", 2 => "EUNE", 3 => "NA", 4 => "KR", 5 => "BR", 6 => "JP", 7 => "LAN", 8 => "LAS", 9 => "OCE", 10 => "TR", _ => null };
         var queue = QueueFilterIndex switch { 1 => "RANKED_SOLO_5x5", 2 => "RANKED_FLEX_SR", _ => null };
         var facets = new AccountFilter(region, queue, RankFilter, SelectedRoleFilters, ChampionFilter, SkinFilter, syncState);
         foreach (var account in AccountSearch.Apply(_accounts, Query, SortRecentlyPlayed ? AccountSort.RecentlyPlayed : AccountSort.Name, facets)) Accounts.Add(new(account));

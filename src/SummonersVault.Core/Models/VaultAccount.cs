@@ -25,7 +25,7 @@ public sealed class VaultAccount
     public string LoginIdentifier { get; set; } = string.Empty;
     public byte[] PasswordUtf8 { get; set; } = [];
     public string? Label { get; set; }
-    public string Region { get; set; } = "EUW1";
+    public string Region { get; set; } = "EUW";
     public string? Notes { get; set; }
     public AccountRole Roles { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;

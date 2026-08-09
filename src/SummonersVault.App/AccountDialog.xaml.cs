@@ -54,13 +54,14 @@ public partial class AccountDialog : Window
         if (password.Length == 0) { MessageBox.Show(this, "Enter the account password.", "Account details", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
         var account = _existing ?? new VaultAccount();
         account.Label = string.IsNullOrWhiteSpace(LabelText.Text) ? null : LabelText.Text.Trim();
-        account.LoginIdentifier = LoginText.Text.Trim(); account.Region = region.Trim().ToUpperInvariant(); account.Notes = string.IsNullOrWhiteSpace(NotesText.Text) ? null : NotesText.Text.Trim(); account.PasswordUtf8 = password;
+        account.LoginIdentifier = LoginText.Text.Trim(); account.Region = LeagueRegion.Normalize(region); account.Notes = string.IsNullOrWhiteSpace(NotesText.Text) ? null : NotesText.Text.Trim(); account.PasswordUtf8 = password;
         account.Roles = (TopRole.IsChecked == true ? AccountRole.Top : 0) | (JungleRole.IsChecked == true ? AccountRole.Jungle : 0) | (MidRole.IsChecked == true ? AccountRole.Mid : 0) | (BotRole.IsChecked == true ? AccountRole.Bot : 0) | (SupportRole.IsChecked == true ? AccountRole.Support : 0);
         Result = account; DialogResult = true;
     }
 
     private void SelectRegion(string region)
     {
+        region = LeagueRegion.Normalize(region);
         foreach (ComboBoxItem item in RegionText.Items)
             if (string.Equals(item.Content?.ToString(), region, StringComparison.OrdinalIgnoreCase)) { RegionText.SelectedItem = item; return; }
         var custom = new ComboBoxItem { Content = region };

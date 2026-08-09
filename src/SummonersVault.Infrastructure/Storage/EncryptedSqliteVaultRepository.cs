@@ -147,7 +147,7 @@ public sealed class EncryptedSqliteVaultRepository(VaultPaths paths) : IVaultRep
             account.SummonerId = snapshot.SummonerId;
             account.RiotGameName = snapshot.RiotGameName;
             account.RiotTagLine = snapshot.RiotTagLine;
-            account.Region = snapshot.Region;
+            account.Region = LeagueRegion.Normalize(snapshot.Region);
             account.ProfileIconId = snapshot.ProfileIconId;
             if (snapshot.ProfileIconBytes is not null) account.ProfileIconBytes = snapshot.ProfileIconBytes;
             account.SummonerLevel = snapshot.SummonerLevel;
@@ -192,6 +192,7 @@ public sealed class EncryptedSqliteVaultRepository(VaultPaths paths) : IVaultRep
 
     private async Task SaveAccountCoreAsync(SqliteConnection connection, VaultAccount account, CancellationToken cancellationToken, SqliteTransaction? existingTransaction = null)
     {
+        account.Region = LeagueRegion.Normalize(account.Region);
         await using var ownedTransaction = existingTransaction is null ? (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false) : null;
         var transaction = existingTransaction ?? ownedTransaction!;
         const string sql = """
@@ -264,7 +265,7 @@ public sealed class EncryptedSqliteVaultRepository(VaultPaths paths) : IVaultRep
 
     private static VaultAccount ReadAccount(SqliteDataReader reader, bool includePassword) => new()
     {
-        Id = Guid.Parse(reader.GetString(0)), LoginIdentifier = reader.GetString(1), PasswordUtf8 = includePassword ? (byte[])reader[2] : [], Label = NullableString(reader, 3), Region = reader.GetString(4), Notes = NullableString(reader, 5), Roles = (AccountRole)reader.GetInt32(6),
+        Id = Guid.Parse(reader.GetString(0)), LoginIdentifier = reader.GetString(1), PasswordUtf8 = includePassword ? (byte[])reader[2] : [], Label = NullableString(reader, 3), Region = LeagueRegion.Normalize(reader.GetString(4)), Notes = NullableString(reader, 5), Roles = (AccountRole)reader.GetInt32(6),
         CreatedAtUtc = ParseDate(reader, 7) ?? DateTimeOffset.UtcNow, ModifiedAtUtc = ParseDate(reader, 8) ?? DateTimeOffset.UtcNow, Puuid = NullableString(reader, 9), SummonerId = NullableInt64(reader, 10), RiotGameName = NullableString(reader, 11), RiotTagLine = NullableString(reader, 12),
         ProfileIconId = NullableInt32(reader, 13), ProfileIconBytes = reader.IsDBNull(14) ? null : (byte[])reader[14], SummonerLevel = NullableInt32(reader, 15), LastSyncedAtUtc = ParseDate(reader, 16), LastMatchPlayedAtUtc = ParseDate(reader, 17), LastMatchId = NullableInt64(reader, 18), MatchHistorySyncedAtUtc = ParseDate(reader, 19), MatchHistoryState = (MatchHistoryState)reader.GetInt32(20),
         RiotPoints = NullableInt64(reader, 21), BlueEssence = NullableInt64(reader, 22)
@@ -295,6 +296,27 @@ public sealed class EncryptedSqliteVaultRepository(VaultPaths paths) : IVaultRep
         await EnsureColumnAsync(connection, "riot_points", "INTEGER", cancellationToken).ConfigureAwait(false);
         await EnsureColumnAsync(connection, "blue_essence", "INTEGER", cancellationToken).ConfigureAwait(false);
         await ExecuteAsync(connection, null, "UPDATE schema_info SET version=2 WHERE version<2", cancellationToken).ConfigureAwait(false);
+        const string normalizeRegionsSql = """
+            UPDATE accounts
+            SET region = CASE UPPER(TRIM(region))
+              WHEN 'EUW1' THEN 'EUW'
+              WHEN 'EUN1' THEN 'EUNE'
+              WHEN 'EUN' THEN 'EUNE'
+              WHEN 'NA1' THEN 'NA'
+              WHEN 'BR1' THEN 'BR'
+              WHEN 'JP1' THEN 'JP'
+              WHEN 'LA1' THEN 'LAN'
+              WHEN 'LA2' THEN 'LAS'
+              WHEN 'OC1' THEN 'OCE'
+              WHEN 'OC' THEN 'OCE'
+              WHEN 'TR1' THEN 'TR'
+              WHEN 'KR1' THEN 'KR'
+              ELSE RTRIM(UPPER(TRIM(region)), '0123456789')
+            END
+            WHERE (SELECT version FROM schema_info LIMIT 1) < 3;
+            UPDATE schema_info SET version=3 WHERE version<3;
+            """;
+        await ExecuteAsync(connection, null, normalizeRegionsSql, cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task EnsureColumnAsync(SqliteConnection connection, string columnName, string columnType, CancellationToken cancellationToken)

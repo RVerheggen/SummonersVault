@@ -59,12 +59,26 @@ public sealed class SecurityAndStorageTests
         Assert.Equal("GOLD", account.CardRank?.Tier);
         Assert.Single(AccountSearch.Apply([account], "dynasty weakside", AccountSort.Name));
         Assert.Single(AccountSearch.Apply([account], null, AccountSort.Name, new(Region: "EUW1", Queue: "RANKED_SOLO_5x5", Rank: "gold iv", Roles: AccountRole.Top, Champion: "ahri", Skin: "dynasty")));
+        Assert.Single(AccountSearch.Apply([account], null, AccountSort.Name, new(Region: "EUW")));
         Assert.Single(AccountSearch.Apply([account], null, AccountSort.Name, new(Rank: " gold iv ", Champion: " ahri ", Skin: " dynasty ")));
         Assert.Empty(AccountSearch.Apply([account], null, AccountSort.Name, new(Queue: "RANKED_FLEX_SR", Rank: "gold")));
         Assert.Single(AccountSearch.Apply([account], null, AccountSort.Name, new(Roles: AccountRole.Top | AccountRole.Jungle)));
         Assert.Empty(AccountSearch.Apply([account], null, AccountSort.Name, new(Skin: "classic")));
         Assert.Empty(AccountSearch.Apply([account], null, AccountSort.Name, new(Region: "NA")));
     }
+
+    [Theory]
+    [InlineData("EUW1", "EUW")]
+    [InlineData("euw", "EUW")]
+    [InlineData(" EUN1 ", "EUNE")]
+    [InlineData("NA1", "NA")]
+    [InlineData("LA1", "LAN")]
+    [InlineData("LA2", "LAS")]
+    [InlineData("OC1", "OCE")]
+    [InlineData("KR1", "KR")]
+    [InlineData("TEST9", "TEST")]
+    public void LeagueRegion_NormalizesPlatformRoutesForDisplay(string input, string expected) =>
+        Assert.Equal(expected, LeagueRegion.Normalize(input));
 
     [Fact]
     public void LeagueIdentityRules_AllowFirstLinkAndRejectADifferentLinkedProfile()
@@ -265,11 +279,13 @@ public sealed class SecurityAndStorageTests
         var root = Path.Combine(Path.GetTempPath(), "SummonersVaultTests", Guid.NewGuid().ToString("N"));
         var paths = new VaultPaths(root);
         var key = RandomNumberGenerator.GetBytes(32);
+        var legacyAccountId = Guid.NewGuid();
         try
         {
             await using (var initial = new EncryptedSqliteVaultRepository(paths))
             {
                 await initial.OpenAsync(key, create: true);
+                await initial.SaveAccountAsync(new VaultAccount { Id = legacyAccountId, LoginIdentifier = "legacy-region", Region = "EUW" });
                 await initial.CloseAsync();
             }
 
@@ -284,7 +300,8 @@ public sealed class SecurityAndStorageTests
             {
                 await connection.OpenAsync();
                 await using var command = connection.CreateCommand();
-                command.CommandText = "ALTER TABLE accounts DROP COLUMN riot_points; ALTER TABLE accounts DROP COLUMN blue_essence; UPDATE schema_info SET version=1;";
+                command.CommandText = "ALTER TABLE accounts DROP COLUMN riot_points; ALTER TABLE accounts DROP COLUMN blue_essence; UPDATE accounts SET region='EUW1' WHERE id=$id; UPDATE schema_info SET version=1;";
+                command.Parameters.AddWithValue("$id", legacyAccountId.ToString("D"));
                 await command.ExecuteNonQueryAsync();
             }
 
@@ -295,6 +312,7 @@ public sealed class SecurityAndStorageTests
             var loaded = await migrated.GetAccountAsync(account.Id);
             Assert.Equal(125, loaded?.RiotPoints);
             Assert.Equal(9000, loaded?.BlueEssence);
+            Assert.Equal("EUW", (await migrated.GetAccountAsync(legacyAccountId))?.Region);
         }
         finally
         {

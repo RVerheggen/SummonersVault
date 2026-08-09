@@ -47,7 +47,11 @@ public sealed class LeagueClientGateway : ILeagueClientGateway
 
         var region = "UNKNOWN";
         using (var regionJson = await TryGetJsonAsync(client, "riotclient/region-locale", cancellationToken).ConfigureAwait(false))
-            if (regionJson is not null) region = GetString(regionJson.RootElement, "region")?.ToUpperInvariant() ?? region;
+            if (regionJson is not null)
+            {
+                var normalizedRegion = LeagueRegion.Normalize(GetString(regionJson.RootElement, "region"));
+                if (!string.IsNullOrEmpty(normalizedRegion)) region = normalizedRegion;
+            }
 
         var ranks = await FetchRanksAsync(client, cancellationToken).ConfigureAwait(false);
         var wallet = await FetchWalletAsync(client, cancellationToken).ConfigureAwait(false);
