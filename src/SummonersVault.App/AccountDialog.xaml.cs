@@ -32,6 +32,13 @@ public partial class AccountDialog : Window
         SupportRole.IsChecked = account.Roles.HasFlag(AccountRole.Support);
         LeagueIdentity.Text = string.IsNullOrWhiteSpace(account.RiotGameName) ? "Linked League profile" : $"{account.RiotGameName}#{account.RiotTagLine} · level {account.SummonerLevel}";
         LeagueSummary.Text = account.Ranks.Count == 0 ? "Unranked" : string.Join(" · ", account.Ranks.Select(x => $"{x.QueueType.Replace("RANKED_", string.Empty, StringComparison.Ordinal)}: {x.Tier} {x.Division} {x.LeaguePoints} LP"));
+        if (RankIconCatalog.GetUri(account.CardRank?.Tier) is { } rankIcon)
+        {
+            RankIconImage.Source = new System.Windows.Media.Imaging.BitmapImage(rankIcon);
+            RankIconImage.Visibility = Visibility.Visible;
+            RankIconImage.ToolTip = account.CardRank is { } rank ? $"{rank.Tier} {rank.Division} · {rank.LeaguePoints} LP" : null;
+            System.Windows.Automation.AutomationProperties.SetName(RankIconImage, RankIconImage.ToolTip?.ToString() ?? "Rank icon");
+        }
         RiotPointsValue.Text = FormatCurrencyValue(account.RiotPoints);
         BlueEssenceValue.Text = FormatCurrencyValue(account.BlueEssence);
         MatchSummary.Text = account.MatchHistoryState switch { MatchHistoryState.NeverPlayed => "Never played", MatchHistoryState.Unknown => "Match history not synced", MatchHistoryState.Stale => $"Last played {account.LastMatchPlayedAtUtc?.ToLocalTime():f} · data may be stale", _ => $"Last played {account.LastMatchPlayedAtUtc?.ToLocalTime():f}" };

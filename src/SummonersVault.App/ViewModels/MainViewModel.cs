@@ -393,6 +393,8 @@ public sealed class AccountCardViewModel(VaultAccount account)
     public string RiotId => string.IsNullOrWhiteSpace(account.RiotGameName) ? "Not linked" : $"{account.RiotGameName}#{account.RiotTagLine}";
     public string Region => account.Region;
     public string Rank => account.CardRank is { } rank ? $"{Title(rank.Tier)} {rank.Division} · {rank.LeaguePoints} LP" : "Unranked";
+    public Uri? RankIcon => RankIconCatalog.GetUri(account.CardRank?.Tier);
+    public bool HasRankIcon => RankIcon is not null;
     public string Roles => account.Roles == AccountRole.None ? "No role tags" : account.Roles.ToString().Replace(",", " ·", StringComparison.Ordinal);
     public string Notes => string.IsNullOrWhiteSpace(account.Notes) ? "No notes" : account.Notes;
     public byte[]? Icon => account.ProfileIconBytes;

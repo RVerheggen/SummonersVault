@@ -16,5 +16,6 @@
   <ItemGroup>
     <Resource Include="Assets\blue-essence.png" />
     <Resource Include="Assets\rp.png" />
+    <Resource Include="Assets\RankIcons\*.png" />
   </ItemGroup>
 </Project>
