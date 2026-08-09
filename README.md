@@ -24,6 +24,10 @@ The master password must contain at least 8 Unicode characters; a 12+ character 
 
 SummonersVault never logs in for you, sends credentials to Riot, modifies the client or game, or requires a Riot API key. Its LCU connection is loopback-only and read-only. LCU endpoints are unsupported community interfaces and can change without notice.
 
+### Why login is not automated
+
+SummonersVault deliberately does not automatically enter credentials or submit the Riot Client login form. Riot's [Terms of Service](https://www.riotgames.com/en/terms-of-service) broadly prohibit unauthorized automation programs that interact with Riot Services. Even though password autofill would provide no gameplay advantage, Riot does not publicly identify this use as authorized. Avoiding login automation reduces the risk of users receiving account penalties, including a potential suspension or ban.
+
 ## Fan-project notice
 
 SummonersVault isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games and all associated properties are trademarks or registered trademarks of Riot Games, Inc.
