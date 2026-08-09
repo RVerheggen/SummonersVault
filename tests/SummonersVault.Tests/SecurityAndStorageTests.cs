@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.Data.Sqlite;
 using SummonersVault.Core.Models;
 using SummonersVault.Core.Abstractions;
 using SummonersVault.Core.Services;
@@ -152,16 +153,53 @@ public sealed class SecurityAndStorageTests
         Assert.Equal(expected, LeagueClientGateway.IsInventoryPayloadReady(document.RootElement));
     }
 
+    [Theory]
+    [InlineData("{\"rp\":1350,\"ip\":42000}", 1350L, 42000L)]
+    [InlineData("{\"rp\":0,\"ip\":0}", 0L, 0L)]
+    [InlineData("{\"rp\":1350}", 1350L, null)]
+    [InlineData("{\"RP\":\"250\",\"blueEssence\":\"7000\"}", 250L, 7000L)]
+    [InlineData("{\"RP\":250,\"lol_blue_essence\":7000}", 250L, 7000L)]
+    [InlineData("[]", null, null)]
+    public void WalletParser_MapsLegacyIpFieldToBlueEssence(string json, long? expectedRp, long? expectedBlueEssence)
+    {
+        using var document = System.Text.Json.JsonDocument.Parse(json);
+        var wallet = LeagueClientGateway.ParseWallet(document.RootElement);
+        Assert.Equal(expectedRp, wallet?.RiotPoints);
+        Assert.Equal(expectedBlueEssence, wallet?.BlueEssence);
+    }
+
+    [Theory]
+    [InlineData("250", "RP", 250L)]
+    [InlineData("\"7000\"", "IP", 7000L)]
+    [InlineData("{\"RP\":250}", "RP", 250L)]
+    [InlineData("{\"lol_blue_essence\":7000}", "lol_blue_essence", 7000L)]
+    [InlineData("{\"balance\":7000}", "IP", 7000L)]
+    [InlineData("{\"quantity\":7000}", "IP", 7000L)]
+    [InlineData("{}", "RP", null)]
+    public void WalletCurrencyParser_AcceptsInventoryEndpointShapes(string json, string currencyType, long? expected)
+    {
+        using var document = System.Text.Json.JsonDocument.Parse(json);
+        Assert.Equal(expected, LeagueClientGateway.ParseWalletCurrency(document.RootElement, currencyType));
+    }
+
     [Fact]
     public void LeagueSnapshot_RequiresBothInventoryCategoriesToBeComplete()
     {
         var snapshot = Snapshot(MatchSnapshotResult.Failed);
         Assert.False(snapshot.HasCompleteInventory);
-        Assert.True(new LeagueSnapshot
+        Assert.False(snapshot.HasCompleteSyncData);
+        var completeInventory = new LeagueSnapshot
         {
             Puuid = "puuid", RiotGameName = "Player", RiotTagLine = "EUW", Region = "EUW1",
             Champions = [], Skins = []
-        }.HasCompleteInventory);
+        };
+        Assert.True(completeInventory.HasCompleteInventory);
+        Assert.False(completeInventory.HasCompleteSyncData);
+        Assert.True(new LeagueSnapshot
+        {
+            Puuid = "puuid", RiotGameName = "Player", RiotTagLine = "EUW", Region = "EUW1",
+            Champions = [], Skins = [], Wallet = new(0, 0)
+        }.HasCompleteSyncData);
     }
 
     [Fact]
@@ -202,7 +240,7 @@ public sealed class SecurityAndStorageTests
             var account = new VaultAccount { LoginIdentifier = "plaintext-login-marker", PasswordUtf8 = Encoding.UTF8.GetBytes("plaintext-password-marker"), Region = "EUW1", Roles = AccountRole.Mid | AccountRole.Support };
             account.Champions.Add(new(1, "Annie")); account.Skins.Add(new(1000, 1, "Annie")); account.Skins.Add(new(1001, 1, "Goth Annie")); await repository.SaveAccountAsync(account);
             var newest = new DateTimeOffset(2026, 8, 5, 22, 30, 0, TimeSpan.Zero);
-            await repository.ApplyLeagueSnapshotAsync(account.Id, Snapshot(MatchSnapshotResult.Known(newest, 42)));
+            await repository.ApplyLeagueSnapshotAsync(account.Id, Snapshot(MatchSnapshotResult.Known(newest, 42), new(975, 123456)));
             await repository.ApplyLeagueSnapshotAsync(account.Id, Snapshot(MatchSnapshotResult.Known(newest.AddDays(-1), 41)));
             var loaded = await repository.GetAccountAsync(account.Id);
             Assert.Equal(newest, loaded?.LastMatchPlayedAtUtc); Assert.Equal(42, loaded?.LastMatchId);
@@ -210,6 +248,7 @@ public sealed class SecurityAndStorageTests
             loaded = await repository.GetAccountAsync(account.Id);
             Assert.Equal(MatchHistoryState.Stale, loaded?.MatchHistoryState); Assert.Equal(newest, loaded?.LastMatchPlayedAtUtc);
             Assert.Equal("Goth Annie", Assert.Single(loaded!.Skins).Name);
+            Assert.Equal(975, loaded.RiotPoints); Assert.Equal(123456, loaded.BlueEssence);
             await repository.CloseAsync();
             var bytes = await File.ReadAllBytesAsync(paths.DatabasePath); var text = Encoding.UTF8.GetString(bytes);
             Assert.DoesNotContain("plaintext-login-marker", text, StringComparison.Ordinal); Assert.DoesNotContain("plaintext-password-marker", text, StringComparison.Ordinal);
@@ -217,6 +256,50 @@ public sealed class SecurityAndStorageTests
             CryptographicOperations.ZeroMemory(key);
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
+    public async Task EncryptedRepository_MigratesWalletColumnsForAnExistingVault()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "SummonersVaultTests", Guid.NewGuid().ToString("N"));
+        var paths = new VaultPaths(root);
+        var key = RandomNumberGenerator.GetBytes(32);
+        try
+        {
+            await using (var initial = new EncryptedSqliteVaultRepository(paths))
+            {
+                await initial.OpenAsync(key, create: true);
+                await initial.CloseAsync();
+            }
+
+            var normalizedPath = Path.GetFullPath(paths.DatabasePath).Replace('\\', '/');
+            var connectionString = new SqliteConnectionStringBuilder
+            {
+                DataSource = $"file:{normalizedPath}?cipher=sqlcipher&legacy=4",
+                Password = $"x'{Convert.ToHexString(key)}'",
+                Pooling = false
+            }.ToString();
+            await using (var connection = new SqliteConnection(connectionString))
+            {
+                await connection.OpenAsync();
+                await using var command = connection.CreateCommand();
+                command.CommandText = "ALTER TABLE accounts DROP COLUMN riot_points; ALTER TABLE accounts DROP COLUMN blue_essence; UPDATE schema_info SET version=1;";
+                await command.ExecuteNonQueryAsync();
+            }
+
+            await using var migrated = new EncryptedSqliteVaultRepository(paths);
+            await migrated.OpenAsync(key, create: false);
+            var account = new VaultAccount { LoginIdentifier = "migrated", PasswordUtf8 = "local-secret"u8.ToArray(), Region = "EUW1", RiotPoints = 125, BlueEssence = 9000 };
+            await migrated.SaveAccountAsync(account);
+            var loaded = await migrated.GetAccountAsync(account.Id);
+            Assert.Equal(125, loaded?.RiotPoints);
+            Assert.Equal(9000, loaded?.BlueEssence);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(key);
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
     }
 
     [Fact]
@@ -229,7 +312,7 @@ public sealed class SecurityAndStorageTests
         {
             var sourcePaths = new VaultPaths(sourceRoot); var sourceRepository = new EncryptedSqliteVaultRepository(sourcePaths); await using var sourceSession = new VaultSession(sourcePaths, sourceRepository);
             await sourceSession.CreateAsync("source password"u8.ToArray());
-            var account = new VaultAccount { LoginIdentifier = "backup-user", PasswordUtf8 = "backup-secret"u8.ToArray(), Region = "NA1", LastMatchPlayedAtUtc = new(2026, 8, 4, 12, 0, 0, TimeSpan.Zero), LastMatchId = 999, MatchHistoryState = MatchHistoryState.Stale };
+            var account = new VaultAccount { LoginIdentifier = "backup-user", PasswordUtf8 = "backup-secret"u8.ToArray(), Region = "NA1", LastMatchPlayedAtUtc = new(2026, 8, 4, 12, 0, 0, TimeSpan.Zero), LastMatchId = 999, MatchHistoryState = MatchHistoryState.Stale, RiotPoints = 500, BlueEssence = 25000 };
             await sourceRepository.SaveAccountAsync(account);
             await new VaultBackupService(sourcePaths, sourceSession).ExportAsync(archive);
 
@@ -239,10 +322,11 @@ public sealed class SecurityAndStorageTests
             await using (var preview = await targetBackup.PreviewImportAsync(archive, "source password"u8.ToArray())) await targetBackup.ImportAsync(preview, new Dictionary<Guid, BackupConflictChoice>());
             var imported = Assert.Single(await targetRepository.GetAccountsAsync());
             Assert.Equal(account.LastMatchPlayedAtUtc, imported.LastMatchPlayedAtUtc); Assert.Equal(999, imported.LastMatchId); Assert.Equal(MatchHistoryState.Stale, imported.MatchHistoryState);
+            Assert.Equal(500, imported.RiotPoints); Assert.Equal(25000, imported.BlueEssence);
             var withPassword = await targetRepository.GetAccountAsync(imported.Id, includePassword: true); Assert.Equal("backup-secret", Encoding.UTF8.GetString(withPassword!.PasswordUtf8));
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); }
     }
 
-    private static LeagueSnapshot Snapshot(MatchSnapshotResult match) => new() { Puuid = "puuid", RiotGameName = "Player", RiotTagLine = "EUW", Region = "EUW1", Match = match };
+    private static LeagueSnapshot Snapshot(MatchSnapshotResult match, LeagueWalletSnapshot? wallet = null) => new() { Puuid = "puuid", RiotGameName = "Player", RiotTagLine = "EUW", Region = "EUW1", Match = match, Wallet = wallet };
 }

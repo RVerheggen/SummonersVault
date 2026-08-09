@@ -151,6 +151,8 @@ public sealed class EncryptedSqliteVaultRepository(VaultPaths paths) : IVaultRep
             account.ProfileIconId = snapshot.ProfileIconId;
             if (snapshot.ProfileIconBytes is not null) account.ProfileIconBytes = snapshot.ProfileIconBytes;
             account.SummonerLevel = snapshot.SummonerLevel;
+            if (snapshot.Wallet?.RiotPoints is { } riotPoints) account.RiotPoints = riotPoints;
+            if (snapshot.Wallet?.BlueEssence is { } blueEssence) account.BlueEssence = blueEssence;
             account.LastSyncedAtUtc = DateTimeOffset.UtcNow;
             account.ModifiedAtUtc = DateTimeOffset.UtcNow;
             if (snapshot.Ranks is not null) { account.Ranks.Clear(); account.Ranks.AddRange(snapshot.Ranks); }
@@ -193,16 +195,17 @@ public sealed class EncryptedSqliteVaultRepository(VaultPaths paths) : IVaultRep
         await using var ownedTransaction = existingTransaction is null ? (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false) : null;
         var transaction = existingTransaction ?? ownedTransaction!;
         const string sql = """
-            INSERT INTO accounts(id,login_identifier,password,label,region,notes,roles,created_at,modified_at,puuid,summoner_id,riot_game_name,riot_tag_line,profile_icon_id,profile_icon,summoner_level,last_synced_at,last_match_played_at,last_match_id,match_history_synced_at,match_history_state)
-            VALUES($id,$login,$password,$label,$region,$notes,$roles,$created,$modified,$puuid,$summonerId,$riotName,$tag,$iconId,$icon,$level,$synced,$lastPlayed,$matchId,$matchSynced,$matchState)
-            ON CONFLICT(id) DO UPDATE SET login_identifier=excluded.login_identifier,password=excluded.password,label=excluded.label,region=excluded.region,notes=excluded.notes,roles=excluded.roles,modified_at=excluded.modified_at,puuid=excluded.puuid,summoner_id=excluded.summoner_id,riot_game_name=excluded.riot_game_name,riot_tag_line=excluded.riot_tag_line,profile_icon_id=excluded.profile_icon_id,profile_icon=excluded.profile_icon,summoner_level=excluded.summoner_level,last_synced_at=excluded.last_synced_at,last_match_played_at=excluded.last_match_played_at,last_match_id=excluded.last_match_id,match_history_synced_at=excluded.match_history_synced_at,match_history_state=excluded.match_history_state
+            INSERT INTO accounts(id,login_identifier,password,label,region,notes,roles,created_at,modified_at,puuid,summoner_id,riot_game_name,riot_tag_line,profile_icon_id,profile_icon,summoner_level,last_synced_at,last_match_played_at,last_match_id,match_history_synced_at,match_history_state,riot_points,blue_essence)
+            VALUES($id,$login,$password,$label,$region,$notes,$roles,$created,$modified,$puuid,$summonerId,$riotName,$tag,$iconId,$icon,$level,$synced,$lastPlayed,$matchId,$matchSynced,$matchState,$riotPoints,$blueEssence)
+            ON CONFLICT(id) DO UPDATE SET login_identifier=excluded.login_identifier,password=excluded.password,label=excluded.label,region=excluded.region,notes=excluded.notes,roles=excluded.roles,modified_at=excluded.modified_at,puuid=excluded.puuid,summoner_id=excluded.summoner_id,riot_game_name=excluded.riot_game_name,riot_tag_line=excluded.riot_tag_line,profile_icon_id=excluded.profile_icon_id,profile_icon=excluded.profile_icon,summoner_level=excluded.summoner_level,last_synced_at=excluded.last_synced_at,last_match_played_at=excluded.last_match_played_at,last_match_id=excluded.last_match_id,match_history_synced_at=excluded.match_history_synced_at,match_history_state=excluded.match_history_state,riot_points=excluded.riot_points,blue_essence=excluded.blue_essence
             """;
         await ExecuteAsync(connection, transaction, sql, cancellationToken,
             ("$id", account.Id.ToString("D")), ("$login", account.LoginIdentifier), ("$password", account.PasswordUtf8), ("$label", account.Label),
             ("$region", account.Region), ("$notes", account.Notes), ("$roles", (int)account.Roles), ("$created", Format(account.CreatedAtUtc)), ("$modified", Format(account.ModifiedAtUtc)),
             ("$puuid", account.Puuid), ("$summonerId", account.SummonerId), ("$riotName", account.RiotGameName), ("$tag", account.RiotTagLine),
             ("$iconId", account.ProfileIconId), ("$icon", account.ProfileIconBytes), ("$level", account.SummonerLevel), ("$synced", Format(account.LastSyncedAtUtc)),
-            ("$lastPlayed", Format(account.LastMatchPlayedAtUtc)), ("$matchId", account.LastMatchId), ("$matchSynced", Format(account.MatchHistorySyncedAtUtc)), ("$matchState", (int)account.MatchHistoryState)).ConfigureAwait(false);
+            ("$lastPlayed", Format(account.LastMatchPlayedAtUtc)), ("$matchId", account.LastMatchId), ("$matchSynced", Format(account.MatchHistorySyncedAtUtc)), ("$matchState", (int)account.MatchHistoryState),
+            ("$riotPoints", account.RiotPoints), ("$blueEssence", account.BlueEssence)).ConfigureAwait(false);
 
         foreach (var table in new[] { "ranks", "champions", "skins" })
             await ExecuteAsync(connection, transaction, $"DELETE FROM {table} WHERE account_id=$id", cancellationToken, ("$id", account.Id.ToString("D"))).ConfigureAwait(false);
@@ -263,7 +266,8 @@ public sealed class EncryptedSqliteVaultRepository(VaultPaths paths) : IVaultRep
     {
         Id = Guid.Parse(reader.GetString(0)), LoginIdentifier = reader.GetString(1), PasswordUtf8 = includePassword ? (byte[])reader[2] : [], Label = NullableString(reader, 3), Region = reader.GetString(4), Notes = NullableString(reader, 5), Roles = (AccountRole)reader.GetInt32(6),
         CreatedAtUtc = ParseDate(reader, 7) ?? DateTimeOffset.UtcNow, ModifiedAtUtc = ParseDate(reader, 8) ?? DateTimeOffset.UtcNow, Puuid = NullableString(reader, 9), SummonerId = NullableInt64(reader, 10), RiotGameName = NullableString(reader, 11), RiotTagLine = NullableString(reader, 12),
-        ProfileIconId = NullableInt32(reader, 13), ProfileIconBytes = reader.IsDBNull(14) ? null : (byte[])reader[14], SummonerLevel = NullableInt32(reader, 15), LastSyncedAtUtc = ParseDate(reader, 16), LastMatchPlayedAtUtc = ParseDate(reader, 17), LastMatchId = NullableInt64(reader, 18), MatchHistorySyncedAtUtc = ParseDate(reader, 19), MatchHistoryState = (MatchHistoryState)reader.GetInt32(20)
+        ProfileIconId = NullableInt32(reader, 13), ProfileIconBytes = reader.IsDBNull(14) ? null : (byte[])reader[14], SummonerLevel = NullableInt32(reader, 15), LastSyncedAtUtc = ParseDate(reader, 16), LastMatchPlayedAtUtc = ParseDate(reader, 17), LastMatchId = NullableInt64(reader, 18), MatchHistorySyncedAtUtc = ParseDate(reader, 19), MatchHistoryState = (MatchHistoryState)reader.GetInt32(20),
+        RiotPoints = NullableInt64(reader, 21), BlueEssence = NullableInt64(reader, 22)
     };
 
     private static string? NullableString(SqliteDataReader reader, int index) => reader.IsDBNull(index) ? null : reader.GetString(index);
@@ -285,16 +289,32 @@ public sealed class EncryptedSqliteVaultRepository(VaultPaths paths) : IVaultRep
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private static Task InitializeSchemaAsync(SqliteConnection connection, CancellationToken cancellationToken) => ExecuteAsync(connection, null, SchemaSql, cancellationToken);
+    private static async Task InitializeSchemaAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        await ExecuteAsync(connection, null, SchemaSql, cancellationToken).ConfigureAwait(false);
+        await EnsureColumnAsync(connection, "riot_points", "INTEGER", cancellationToken).ConfigureAwait(false);
+        await EnsureColumnAsync(connection, "blue_essence", "INTEGER", cancellationToken).ConfigureAwait(false);
+        await ExecuteAsync(connection, null, "UPDATE schema_info SET version=2 WHERE version<2", cancellationToken).ConfigureAwait(false);
+    }
 
-    private const string AccountSelect = "SELECT id,login_identifier,password,label,region,notes,roles,created_at,modified_at,puuid,summoner_id,riot_game_name,riot_tag_line,profile_icon_id,profile_icon,summoner_level,last_synced_at,last_match_played_at,last_match_id,match_history_synced_at,match_history_state FROM accounts";
+    private static async Task EnsureColumnAsync(SqliteConnection connection, string columnName, string columnType, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM pragma_table_info('accounts') WHERE name=$name";
+        command.Parameters.AddWithValue("$name", columnName);
+        var exists = Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false), CultureInfo.InvariantCulture) > 0;
+        if (!exists) await ExecuteAsync(connection, null, $"ALTER TABLE accounts ADD COLUMN {columnName} {columnType}", cancellationToken).ConfigureAwait(false);
+    }
+
+    private const string AccountSelect = "SELECT id,login_identifier,password,label,region,notes,roles,created_at,modified_at,puuid,summoner_id,riot_game_name,riot_tag_line,profile_icon_id,profile_icon,summoner_level,last_synced_at,last_match_played_at,last_match_id,match_history_synced_at,match_history_state,riot_points,blue_essence FROM accounts";
     private const string SchemaSql = """
         CREATE TABLE IF NOT EXISTS schema_info(version INTEGER NOT NULL);
         INSERT INTO schema_info(version) SELECT 1 WHERE NOT EXISTS(SELECT 1 FROM schema_info);
         CREATE TABLE IF NOT EXISTS accounts(
           id TEXT PRIMARY KEY, login_identifier TEXT NOT NULL, password BLOB NOT NULL, label TEXT, region TEXT NOT NULL, notes TEXT, roles INTEGER NOT NULL DEFAULT 0,
           created_at TEXT NOT NULL, modified_at TEXT NOT NULL, puuid TEXT, summoner_id INTEGER, riot_game_name TEXT, riot_tag_line TEXT, profile_icon_id INTEGER, profile_icon BLOB,
-          summoner_level INTEGER, last_synced_at TEXT, last_match_played_at TEXT, last_match_id INTEGER, match_history_synced_at TEXT, match_history_state INTEGER NOT NULL DEFAULT 0);
+          summoner_level INTEGER, last_synced_at TEXT, last_match_played_at TEXT, last_match_id INTEGER, match_history_synced_at TEXT, match_history_state INTEGER NOT NULL DEFAULT 0,
+          riot_points INTEGER, blue_essence INTEGER);
         CREATE UNIQUE INDEX IF NOT EXISTS ix_accounts_puuid ON accounts(puuid) WHERE puuid IS NOT NULL;
         CREATE INDEX IF NOT EXISTS ix_accounts_login_region ON accounts(login_identifier COLLATE NOCASE, region);
         CREATE TABLE IF NOT EXISTS ranks(account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE, queue_type TEXT NOT NULL, tier TEXT NOT NULL, division TEXT NOT NULL, league_points INTEGER NOT NULL, wins INTEGER NOT NULL, losses INTEGER NOT NULL, PRIMARY KEY(account_id,queue_type));

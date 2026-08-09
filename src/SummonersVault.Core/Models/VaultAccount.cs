@@ -37,6 +37,8 @@ public sealed class VaultAccount
     public int? ProfileIconId { get; set; }
     public byte[]? ProfileIconBytes { get; set; }
     public int? SummonerLevel { get; set; }
+    public long? RiotPoints { get; set; }
+    public long? BlueEssence { get; set; }
     public DateTimeOffset? LastSyncedAtUtc { get; set; }
     public DateTimeOffset? LastMatchPlayedAtUtc { get; set; }
     public long? LastMatchId { get; set; }
@@ -66,4 +68,3 @@ public sealed class VaultAccount
 public sealed record RankSnapshot(string QueueType, string Tier, string Division, int LeaguePoints, int Wins, int Losses);
 public sealed record OwnedChampion(int ChampionId, string Name);
 public sealed record OwnedSkin(int SkinId, int ChampionId, string Name);
-

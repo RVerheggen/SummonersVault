@@ -13,4 +13,8 @@
     <PackageReference Include="CommunityToolkit.Mvvm" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
   </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Assets\blue-essence.png" />
+    <Resource Include="Assets\rp.png" />
+  </ItemGroup>
 </Project>

@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -49,6 +50,7 @@ public sealed class LeagueClientGateway : ILeagueClientGateway
             if (regionJson is not null) region = GetString(regionJson.RootElement, "region")?.ToUpperInvariant() ?? region;
 
         var ranks = await FetchRanksAsync(client, cancellationToken).ConfigureAwait(false);
+        var wallet = await FetchWalletAsync(client, cancellationToken).ConfigureAwait(false);
         var champions = summonerId.HasValue ? await FetchChampionsAsync(client, summonerId.Value, cancellationToken).ConfigureAwait(false) : null;
         var skins = summonerId.HasValue ? await FetchSkinsAsync(client, summonerId.Value, cancellationToken).ConfigureAwait(false) : null;
         var match = await FetchLatestMatchAsync(client, puuid, cancellationToken).ConfigureAwait(false);
@@ -66,7 +68,7 @@ public sealed class LeagueClientGateway : ILeagueClientGateway
         return new LeagueSnapshot
         {
             Puuid = puuid, SummonerId = summonerId, RiotGameName = riotName, RiotTagLine = tag, Region = region,
-            ProfileIconId = iconId, ProfileIconBytes = icon, SummonerLevel = summonerLevel,
+            ProfileIconId = iconId, ProfileIconBytes = icon, SummonerLevel = summonerLevel, Wallet = wallet,
             Ranks = ranks, Champions = champions, Skins = skins, Match = match
         };
     }
@@ -163,6 +165,77 @@ public sealed class LeagueClientGateway : ILeagueClientGateway
 
     internal static bool IsInventoryPayloadReady(JsonElement element) =>
         element.ValueKind == JsonValueKind.Array && element.GetArrayLength() > 0;
+
+    internal static LeagueWalletSnapshot? ParseWallet(JsonElement element) =>
+        element.ValueKind == JsonValueKind.Object
+            ? new LeagueWalletSnapshot(GetWalletValue(element, "rp"), GetWalletValue(element, "lol_blue_essence", "ip", "blueEssence", "be"))
+            : null;
+
+    private static async Task<LeagueWalletSnapshot?> FetchWalletAsync(HttpClient client, CancellationToken cancellationToken)
+    {
+        LeagueWalletSnapshot? partial = null;
+        foreach (var path in new[] { "lol-login/v1/wallet", "lol-store/v1/wallet" })
+        {
+            using var json = await TryGetJsonAsync(client, path, cancellationToken).ConfigureAwait(false);
+            if (json is null) continue;
+            var wallet = ParseWallet(json.RootElement);
+            if (wallet is null) continue;
+            partial = MergeWallet(partial, wallet);
+            if (partial is { RiotPoints: not null, BlueEssence: not null }) return partial;
+        }
+
+        var riotPoints = partial?.RiotPoints
+            ?? await FetchWalletCurrencyAsync(client, "RP", cancellationToken).ConfigureAwait(false);
+        var blueEssence = partial?.BlueEssence
+            ?? await FetchWalletCurrencyAsync(client, "lol_blue_essence", cancellationToken).ConfigureAwait(false)
+            ?? await FetchWalletCurrencyAsync(client, "IP", cancellationToken).ConfigureAwait(false);
+
+        if (riotPoints.HasValue || blueEssence.HasValue)
+            return new LeagueWalletSnapshot(riotPoints, blueEssence);
+
+        return partial;
+    }
+
+    private static LeagueWalletSnapshot MergeWallet(LeagueWalletSnapshot? current, LeagueWalletSnapshot incoming) =>
+        new(current?.RiotPoints ?? incoming.RiotPoints, current?.BlueEssence ?? incoming.BlueEssence);
+
+    private static async Task<long?> FetchWalletCurrencyAsync(
+        HttpClient client,
+        string currencyType,
+        CancellationToken cancellationToken)
+    {
+        using var json = await TryGetJsonAsync(
+            client,
+            $"lol-inventory/v1/wallet/{currencyType}",
+            cancellationToken).ConfigureAwait(false);
+
+        return json is null ? null : ParseWalletCurrency(json.RootElement, currencyType);
+    }
+
+    internal static long? ParseWalletCurrency(JsonElement element, string currencyType) =>
+        TryGetNumericValue(element)
+        ?? (element.ValueKind == JsonValueKind.Object
+            ? GetWalletValue(element, currencyType, "amount", "balance", "quantity", "value")
+            : null);
+
+    private static long? GetWalletValue(JsonElement element, params string[] names)
+    {
+        foreach (var property in element.EnumerateObject())
+        {
+            if (!names.Any(name => property.Name.Equals(name, StringComparison.OrdinalIgnoreCase))) continue;
+            var value = TryGetNumericValue(property.Value);
+            if (value.HasValue) return value;
+        }
+        return null;
+    }
+
+    private static long? TryGetNumericValue(JsonElement element)
+    {
+        if (element.ValueKind == JsonValueKind.Number && element.TryGetInt64(out var numeric)) return numeric;
+        if (element.ValueKind == JsonValueKind.String
+            && long.TryParse(element.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out numeric)) return numeric;
+        return null;
+    }
 
     private static async Task<IReadOnlyList<RankSnapshot>?> FetchRanksAsync(HttpClient client, CancellationToken cancellationToken)
     {

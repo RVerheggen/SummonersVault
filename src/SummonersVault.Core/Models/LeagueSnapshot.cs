@@ -10,11 +10,13 @@ public sealed class LeagueSnapshot
     public int? ProfileIconId { get; init; }
     public byte[]? ProfileIconBytes { get; init; }
     public int? SummonerLevel { get; init; }
+    public LeagueWalletSnapshot? Wallet { get; init; }
     public IReadOnlyList<RankSnapshot>? Ranks { get; init; }
     public IReadOnlyList<OwnedChampion>? Champions { get; init; }
     public IReadOnlyList<OwnedSkin>? Skins { get; init; }
     public MatchSnapshotResult Match { get; init; } = MatchSnapshotResult.Failed;
     public bool HasCompleteInventory => Champions is not null && Skins is not null;
+    public bool HasCompleteSyncData => HasCompleteInventory && Wallet is { RiotPoints: not null, BlueEssence: not null };
 }
 
 public sealed record MatchSnapshotResult(bool Succeeded, bool HasMatch, DateTimeOffset? PlayedAtUtc, long? MatchId)
@@ -25,3 +27,4 @@ public sealed record MatchSnapshotResult(bool Succeeded, bool HasMatch, DateTime
 }
 
 public sealed record LeagueClientStatus(bool IsRunning, bool IsLoggedIn, string Message);
+public sealed record LeagueWalletSnapshot(long? RiotPoints, long? BlueEssence);

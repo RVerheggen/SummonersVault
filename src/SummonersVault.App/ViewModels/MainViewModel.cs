@@ -190,15 +190,15 @@ public sealed partial class MainViewModel(
                 try
                 {
                     IsBusy = true;
-                    var inventoryComplete = await SynchronizeAccountAsync(accountId);
-                    if (inventoryComplete)
+                    var snapshot = await SynchronizeAccountAsync(accountId);
+                    if (snapshot.HasCompleteSyncData)
                     {
                         _pendingLeagueAccountId = null;
                         StatusMessage = "League profile synchronized";
                     }
                     else
                     {
-                        StatusMessage = "League profile linked - waiting for champion and skin inventory…";
+                        StatusMessage = $"League profile linked - waiting for {DescribeMissingSyncData(snapshot)}…";
                     }
                 }
                 catch (LeagueIdentityConflictException ex)
@@ -223,8 +223,8 @@ public sealed partial class MainViewModel(
         {
             IsBusy = true;
             StatusMessage = "Reading the signed-in League account…";
-            var inventoryComplete = await SynchronizeAccountAsync(accountId);
-            if (inventoryComplete)
+            var snapshot = await SynchronizeAccountAsync(accountId);
+            if (snapshot.HasCompleteSyncData)
             {
                 if (_pendingLeagueAccountId == accountId) _pendingLeagueAccountId = null;
                 StatusMessage = "League profile synchronized";
@@ -232,8 +232,8 @@ public sealed partial class MainViewModel(
             else
             {
                 StatusMessage = _pendingLeagueAccountId == accountId
-                    ? "League profile linked - inventory is still loading and automatic synchronization will retry."
-                    : "League profile synchronized, but inventory is still loading. Try again shortly.";
+                    ? $"League profile linked - {DescribeMissingSyncData(snapshot)} is still loading and automatic synchronization will retry."
+                    : $"League profile synchronized, but {DescribeMissingSyncData(snapshot)} is still loading. Try again shortly.";
             }
         }
         catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or HttpRequestException or TaskCanceledException)
@@ -245,7 +245,7 @@ public sealed partial class MainViewModel(
         return errorMessage;
     }
 
-    private async Task<bool> SynchronizeAccountAsync(Guid accountId)
+    private async Task<LeagueSnapshot> SynchronizeAccountAsync(Guid accountId)
     {
         var snapshot = await league.FetchCurrentSnapshotAsync();
         var target = _accounts.FirstOrDefault(x => x.Id == accountId)
@@ -260,7 +260,16 @@ public sealed partial class MainViewModel(
         if (existing is not null) throw new LeagueIdentityConflictException($"That League profile is already linked to {existing.DisplayName}.");
         await session.Repository.ApplyLeagueSnapshotAsync(accountId, snapshot);
         await RefreshAsync();
-        return snapshot.HasCompleteInventory;
+        return snapshot;
+    }
+
+    private static string DescribeMissingSyncData(LeagueSnapshot snapshot)
+    {
+        var missing = new List<string>(3);
+        if (snapshot.Champions is null) missing.Add("champion inventory");
+        if (snapshot.Skins is null) missing.Add("skin inventory");
+        if (snapshot.Wallet is not { RiotPoints: not null, BlueEssence: not null }) missing.Add("wallet data");
+        return missing.Count == 0 ? "League data" : string.Join(", ", missing);
     }
 
     private static string FormatRiotId(string? gameName, string? tagLine, string fallback) =>
