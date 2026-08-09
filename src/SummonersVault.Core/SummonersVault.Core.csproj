@@ -2,5 +2,8 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
   </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="SummonersVault.App" />
+    <InternalsVisibleTo Include="SummonersVault.Tests" />
+  </ItemGroup>
 </Project>
-

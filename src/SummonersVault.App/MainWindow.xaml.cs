@@ -64,7 +64,6 @@ public partial class MainWindow : Window
         if (!string.IsNullOrWhiteSpace(error))
             MessageBox.Show(this, error, "Unable to sync account", MessageBoxButton.OK, MessageBoxImage.Warning);
     }
-    private void SuggestionFilter_PreviewTextInput(object sender, TextCompositionEventArgs e) { if (sender is ComboBox comboBox && comboBox.Items.Count > 0) comboBox.IsDropDownOpen = true; }
     private void ClearFilters_Click(object sender, RoutedEventArgs e) => _viewModel.ClearFilters();
     private void Sort_SelectionChanged(object sender, SelectionChangedEventArgs e) { if (_viewModel is not null) _viewModel.SortRecentlyPlayed = ((ComboBox)sender).SelectedIndex == 1; }
     private void Settings_Click(object sender, RoutedEventArgs e) => new SettingsWindow(_viewModel) { Owner = this }.ShowDialog();

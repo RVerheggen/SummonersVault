@@ -20,21 +20,24 @@ public static class AccountSearch
     {
         if (filter is null) return true;
         var comparison = StringComparison.CurrentCultureIgnoreCase;
+        var rankFilter = filter.Rank?.Trim();
+        var championFilter = filter.Champion?.Trim();
+        var skinFilter = filter.Skin?.Trim();
         bool rankMatches;
-        if (string.IsNullOrWhiteSpace(filter.Queue) && string.IsNullOrWhiteSpace(filter.Rank))
+        if (string.IsNullOrWhiteSpace(filter.Queue) && string.IsNullOrWhiteSpace(rankFilter))
             rankMatches = true;
-        else if (string.Equals(filter.Rank?.Trim(), "Unranked", comparison))
+        else if (string.Equals(rankFilter, "Unranked", comparison))
             rankMatches = account.Ranks.Any(rank => (string.IsNullOrWhiteSpace(filter.Queue) || rank.QueueType.Equals(filter.Queue, comparison)) && rank.Tier.Equals("UNRANKED", comparison))
                 || string.IsNullOrWhiteSpace(filter.Queue) && account.Ranks.Count == 0;
         else
             rankMatches = account.Ranks.Any(rank =>
                 (string.IsNullOrWhiteSpace(filter.Queue) || rank.QueueType.Equals(filter.Queue, comparison))
-                && (string.IsNullOrWhiteSpace(filter.Rank) || $"{rank.Tier} {rank.Division}".Contains(filter.Rank, comparison)));
+                && (string.IsNullOrWhiteSpace(rankFilter) || $"{rank.Tier} {rank.Division}".Contains(rankFilter, comparison)));
         return (string.IsNullOrWhiteSpace(filter.Region) || account.Region.Equals(filter.Region, comparison))
             && rankMatches
             && (filter.Roles == AccountRole.None || (account.Roles & filter.Roles) != AccountRole.None)
-            && (string.IsNullOrWhiteSpace(filter.Champion) || account.Champions.Any(x => x.Name.Contains(filter.Champion, comparison)))
-            && (string.IsNullOrWhiteSpace(filter.Skin) || OwnedSkinRules.Normalize(account.Skins).Any(x => x.Name.Contains(filter.Skin, comparison)))
+            && (string.IsNullOrWhiteSpace(championFilter) || account.Champions.Any(x => x.Name.Contains(championFilter, comparison)))
+            && (string.IsNullOrWhiteSpace(skinFilter) || OwnedSkinRules.Normalize(account.Skins).Any(x => x.Name.Contains(skinFilter, comparison)))
             && (!filter.SyncState.HasValue || account.MatchHistoryState == filter.SyncState.Value);
     }
 
