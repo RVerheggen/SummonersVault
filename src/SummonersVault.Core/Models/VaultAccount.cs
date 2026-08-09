@@ -19,6 +19,15 @@ public enum MatchHistoryState
     Stale
 }
 
+public enum SnapshotCategory { Ranked, Wallet, Champions, Skins, Crafting }
+public enum SnapshotState { Unknown, Current, Stale }
+
+public sealed record SnapshotCategoryStatus(
+    SnapshotCategory Category,
+    SnapshotState State,
+    DateTimeOffset? LastAttemptAtUtc,
+    DateTimeOffset? LastSuccessAtUtc);
+
 public sealed class VaultAccount
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -47,6 +56,8 @@ public sealed class VaultAccount
     public List<RankSnapshot> Ranks { get; } = [];
     public List<OwnedChampion> Champions { get; } = [];
     public List<OwnedSkin> Skins { get; } = [];
+    public List<CraftingLootItem> LootItems { get; } = [];
+    public List<SnapshotCategoryStatus> SyncCategories { get; } = [];
 
     public string DisplayName => !string.IsNullOrWhiteSpace(Label)
         ? Label
@@ -65,6 +76,44 @@ public sealed class VaultAccount
     }
 }
 
-public sealed record RankSnapshot(string QueueType, string Tier, string Division, int LeaguePoints, int Wins, int Losses);
-public sealed record OwnedChampion(int ChampionId, string Name);
-public sealed record OwnedSkin(int SkinId, int ChampionId, string Name);
+public sealed record RankSnapshot(
+    string QueueType,
+    string Tier,
+    string Division,
+    int LeaguePoints,
+    int Wins,
+    int Losses,
+    bool IsProvisional = false,
+    int? ProvisionalGamesRemaining = null,
+    string? RatedTier = null,
+    int? RatedRating = null);
+
+public sealed record OwnedChampion(
+    int ChampionId,
+    string Name,
+    string? BaseSplashAssetPath = null,
+    string? SquarePortraitAssetPath = null);
+
+public sealed record OwnedSkin(
+    int SkinId,
+    int ChampionId,
+    string Name,
+    string? SplashAssetPath = null,
+    string? TileAssetPath = null);
+
+public sealed record CraftingLootItem(
+    string LootId,
+    string LootName,
+    string Type,
+    string DisplayCategory,
+    string LocalizedName,
+    string? LocalizedDescription,
+    int Count,
+    string? Rarity,
+    string? ReferenceId,
+    string? AssetPath,
+    string? SplashAssetPath,
+    string? TileAssetPath,
+    DateTimeOffset? ExpiresAtUtc,
+    int? DisenchantValue,
+    int? UpgradeEssenceValue);

@@ -15,13 +15,14 @@ namespace SummonersVault.App;
 public partial class MainWindow : Window
 {
     private readonly MainViewModel _viewModel;
+    private readonly IArtworkService _artwork;
     private readonly DispatcherTimer _lockTimer;
     private readonly DispatcherTimer _clientTimer;
     private DateTimeOffset _lastActivity = DateTimeOffset.UtcNow;
 
-    public MainWindow(MainViewModel viewModel)
+    public MainWindow(MainViewModel viewModel, IArtworkService artwork)
     {
-        InitializeComponent(); DarkTitleBar.Attach(this); DataContext = _viewModel = viewModel;
+        InitializeComponent(); DarkTitleBar.Attach(this); DataContext = _viewModel = viewModel; _artwork = artwork;
         PreviewMouseDown += (_, _) => MarkActive(); PreviewKeyDown += (_, _) => MarkActive(); PreviewTouchDown += (_, _) => MarkActive();
         _lockTimer = new DispatcherTimer(TimeSpan.FromSeconds(10), DispatcherPriority.Background, CheckAutoLock, Dispatcher);
         _clientTimer = new DispatcherTimer(TimeSpan.FromSeconds(5), DispatcherPriority.Background, CheckClient, Dispatcher);
@@ -48,10 +49,8 @@ public partial class MainWindow : Window
     private async void EditAccount_Click(object sender, RoutedEventArgs e)
     {
         if (!TryGetId(sender, out var id)) return;
-        var account = await _viewModel.GetAccountAsync(id, includePassword: true); if (account is null) return;
-        var dialog = new AccountDialog(account) { Owner = this };
-        if (dialog.ShowDialog() != true) return;
-        if (dialog.DeleteRequested) await _viewModel.DeleteAsync(id); else if (dialog.Result is not null) await _viewModel.SaveAccountAsync(dialog.Result);
+        var account = await _viewModel.GetAccountAsync(id); if (account is null) return;
+        new AccountDetailsWindow(_viewModel, account, _artwork) { Owner = this }.Show();
     }
 
     private async void CopyLogin_Click(object sender, RoutedEventArgs e) { if (TryGetId(sender, out var id)) await _viewModel.CopyLoginAsync(id); }

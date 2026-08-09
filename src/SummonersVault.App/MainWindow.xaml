@@ -2,13 +2,11 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:SummonersVault.App.ViewModels"
-        xmlns:conv="clr-namespace:SummonersVault.App.Converters"
         xmlns:controls="clr-namespace:SummonersVault.App.Controls"
         Title="SummonersVault" Width="1280" Height="760" MinWidth="1100" MinHeight="620"
         WindowStartupLocation="CenterScreen" Style="{StaticResource AppWindow}">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolVisibility"/>
-        <conv:ByteArrayImageConverter x:Key="ImageConverter"/>
         <Style x:Key="FilterLabel" TargetType="TextBlock" BasedOn="{StaticResource MutedText}">
             <Setter Property="FontSize" Value="11"/><Setter Property="Margin" Value="2,0,0,5"/>
         </Style>

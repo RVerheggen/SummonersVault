@@ -14,9 +14,11 @@ public sealed class LeagueSnapshot
     public IReadOnlyList<RankSnapshot>? Ranks { get; init; }
     public IReadOnlyList<OwnedChampion>? Champions { get; init; }
     public IReadOnlyList<OwnedSkin>? Skins { get; init; }
+    public IReadOnlyList<CraftingLootItem>? CraftingLoot { get; init; }
     public MatchSnapshotResult Match { get; init; } = MatchSnapshotResult.Failed;
     public bool HasCompleteInventory => Champions is not null && Skins is not null;
-    public bool HasCompleteSyncData => HasCompleteInventory && Wallet is { RiotPoints: not null, BlueEssence: not null };
+    public bool HasCompleteSyncData => HasCompleteInventory && Ranks is not null && CraftingLoot is not null
+        && Wallet is { RiotPoints: not null, BlueEssence: not null };
 }
 
 public sealed record MatchSnapshotResult(bool Succeeded, bool HasMatch, DateTimeOffset? PlayedAtUtc, long? MatchId)

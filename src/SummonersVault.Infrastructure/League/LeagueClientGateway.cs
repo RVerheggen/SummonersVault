@@ -57,6 +57,7 @@ public sealed class LeagueClientGateway : ILeagueClientGateway
         var wallet = await FetchWalletAsync(client, cancellationToken).ConfigureAwait(false);
         var champions = summonerId.HasValue ? await FetchChampionsAsync(client, summonerId.Value, cancellationToken).ConfigureAwait(false) : null;
         var skins = summonerId.HasValue ? await FetchSkinsAsync(client, summonerId.Value, cancellationToken).ConfigureAwait(false) : null;
+        var craftingLoot = await FetchCraftingLootAsync(client, champions, skins, cancellationToken).ConfigureAwait(false);
         var match = await FetchLatestMatchAsync(client, puuid, cancellationToken).ConfigureAwait(false);
         byte[]? icon = null;
         if (iconId.HasValue)
@@ -73,8 +74,23 @@ public sealed class LeagueClientGateway : ILeagueClientGateway
         {
             Puuid = puuid, SummonerId = summonerId, RiotGameName = riotName, RiotTagLine = tag, Region = region,
             ProfileIconId = iconId, ProfileIconBytes = icon, SummonerLevel = summonerLevel, Wallet = wallet,
-            Ranks = ranks, Champions = champions, Skins = skins, Match = match
+            Ranks = ranks, Champions = champions, Skins = skins, CraftingLoot = craftingLoot, Match = match
         };
+    }
+
+    public async Task<byte[]?> FetchAssetAsync(string assetPath, CancellationToken cancellationToken = default)
+    {
+        if (!IsSafeAssetPath(assetPath)) return null;
+        var lockfile = await FindLockfileAsync(cancellationToken).ConfigureAwait(false);
+        if (lockfile is null) return null;
+        try
+        {
+            using var client = CreateClient(lockfile);
+            using var response = await client.GetAsync(assetPath.TrimStart('/'), cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode || response.Content.Headers.ContentLength > 8 * 1024 * 1024) return null;
+            return await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (HttpRequestException) { return null; }
     }
 
     public Task<bool> LaunchAsync(string? configuredInstallDirectory, CancellationToken cancellationToken = default)
@@ -168,7 +184,7 @@ public sealed class LeagueClientGateway : ILeagueClientGateway
         uri is { IsLoopback: true, Host: "127.0.0.1", Scheme: "https" };
 
     internal static bool IsInventoryPayloadReady(JsonElement element) =>
-        element.ValueKind == JsonValueKind.Array && element.GetArrayLength() > 0;
+        element.ValueKind == JsonValueKind.Array;
 
     internal static LeagueWalletSnapshot? ParseWallet(JsonElement element) =>
         element.ValueKind == JsonValueKind.Object
@@ -253,7 +269,11 @@ public sealed class LeagueClientGateway : ILeagueClientGateway
         {
             var queue = GetString(item, "queueType");
             if (string.IsNullOrWhiteSpace(queue)) continue;
-            result.Add(new(queue, GetString(item, "tier") ?? "UNRANKED", GetString(item, "division") ?? string.Empty, GetInt32(item, "leaguePoints") ?? 0, GetInt32(item, "wins") ?? 0, GetInt32(item, "losses") ?? 0));
+            if (queue.Equals("NONE", StringComparison.OrdinalIgnoreCase)) continue;
+            result.Add(new(queue, GetString(item, "tier") ?? "UNRANKED", GetString(item, "division") ?? string.Empty,
+                GetInt32(item, "leaguePoints") ?? 0, GetInt32(item, "wins") ?? 0, GetInt32(item, "losses") ?? 0,
+                GetBoolean(item, "isProvisional") ?? false, GetInt32(item, "provisionalGamesRemaining"),
+                GetString(item, "ratedTier"), GetInt32(item, "ratedRating")));
         }
         return result;
     }
@@ -262,7 +282,9 @@ public sealed class LeagueClientGateway : ILeagueClientGateway
     {
         using var json = await TryGetJsonAsync(client, $"lol-champions/v1/inventories/{summonerId}/champions-minimal", cancellationToken).ConfigureAwait(false);
         if (json is null || !IsInventoryPayloadReady(json.RootElement)) return null;
-        return json.RootElement.EnumerateArray().Where(IsOwned).Select(x => new OwnedChampion(GetInt32(x, "id") ?? 0, GetString(x, "name") ?? "Unknown champion")).Where(x => x.ChampionId > 0).ToArray();
+        return json.RootElement.EnumerateArray().Where(IsOwned).Select(x => new OwnedChampion(
+            GetInt32(x, "id") ?? 0, GetString(x, "name") ?? "Unknown champion",
+            GetString(x, "baseSplashPath"), GetString(x, "squarePortraitPath"))).Where(x => x.ChampionId > 0).ToArray();
     }
 
     private static async Task<IReadOnlyList<OwnedSkin>?> FetchSkinsAsync(HttpClient client, long summonerId, CancellationToken cancellationToken)
@@ -272,9 +294,97 @@ public sealed class LeagueClientGateway : ILeagueClientGateway
         var skins = json.RootElement.EnumerateArray()
             .Where(IsOwned)
             .Where(x => GetBoolean(x, "isBase") != true)
-            .Select(x => new OwnedSkin(GetInt32(x, "id") ?? 0, GetInt32(x, "championId") ?? 0, GetString(x, "name") ?? "Unknown skin"));
+            .Select(x => new OwnedSkin(GetInt32(x, "id") ?? 0, GetInt32(x, "championId") ?? 0, GetString(x, "name") ?? "Unknown skin",
+                GetString(x, "splashPath"), GetString(x, "tilePath")));
         return OwnedSkinRules.Normalize(skins);
     }
+
+    private static async Task<IReadOnlyList<CraftingLootItem>?> FetchCraftingLootAsync(HttpClient client, IReadOnlyList<OwnedChampion>? champions, IReadOnlyList<OwnedSkin>? skins, CancellationToken cancellationToken)
+    {
+        using var readyJson = await TryGetJsonAsync(client, "lol-loot/v1/ready", cancellationToken).ConfigureAwait(false);
+        if (readyJson is null || !ParseLootReady(readyJson.RootElement)) return null;
+        using var json = await TryGetJsonAsync(client, "lol-loot/v1/player-loot", cancellationToken).ConfigureAwait(false);
+        if (json is null) return null;
+        return EnrichCraftingNames(ParseCraftingLoot(json.RootElement), champions, skins);
+    }
+
+    internal static bool ParseLootReady(JsonElement element) => element.ValueKind == JsonValueKind.True
+        || element.ValueKind == JsonValueKind.Object && GetBoolean(element, "ready") == true;
+
+    internal static IReadOnlyList<CraftingLootItem> ParseCraftingLoot(JsonElement element)
+    {
+        if (element.ValueKind != JsonValueKind.Array) return [];
+        var result = new List<CraftingLootItem>();
+        foreach (var item in element.EnumerateArray())
+        {
+            var count = GetInt32(item, "count") ?? 0;
+            var lootId = GetString(item, "lootId");
+            if (count <= 0 || string.IsNullOrWhiteSpace(lootId)) continue;
+            var lootName = FirstNonBlank(GetString(item, "lootName"), lootId);
+            var type = GetString(item, "type") ?? "Other";
+            var display = CategorizeLoot(type, lootName, GetString(item, "displayCategories"));
+            var localizedName = CurrencyDisplayName(lootId, lootName)
+                ?? FirstNonBlank(GetString(item, "localizedName"), GetString(item, "itemDesc"), lootName);
+            result.Add(new(lootId, lootName, type, display,
+                localizedName, GetString(item, "localizedDescription"), count,
+                GetString(item, "rarity"), GetScalarString(item, "refId"), GetString(item, "asset"),
+                GetString(item, "splashPath"), GetString(item, "tilePath"), ParseEpoch(GetInt64(item, "expiryTime")),
+                GetInt32(item, "disenchantValue"), GetInt32(item, "upgradeEssenceValue")));
+        }
+        return result;
+    }
+
+    private static string CategorizeLoot(string type, string name, string? displayCategory)
+    {
+        var value = $"{displayCategory} {type} {name}";
+        if (value.Contains("CURRENCY", StringComparison.OrdinalIgnoreCase)) return "Currencies";
+        if (value.Contains("CHAMPION", StringComparison.OrdinalIgnoreCase)) return "Champion shards";
+        if (value.Contains("SKIN", StringComparison.OrdinalIgnoreCase)) return "Skin shards";
+        if (value.Contains("MATERIAL", StringComparison.OrdinalIgnoreCase) || value.Contains("CHEST", StringComparison.OrdinalIgnoreCase) || value.Contains("KEY", StringComparison.OrdinalIgnoreCase) || value.Contains("TOKEN", StringComparison.OrdinalIgnoreCase)) return "Materials";
+        return "Other";
+    }
+
+    private static string? CurrencyDisplayName(string lootId, string lootName)
+    {
+        var value = $"{lootId} {lootName}";
+        if (value.Contains("CURRENCY_champion", StringComparison.OrdinalIgnoreCase)) return "Blue Essence";
+        if (value.Contains("CURRENCY_cosmetic", StringComparison.OrdinalIgnoreCase)) return "Orange Essence";
+        return null;
+    }
+
+    private static IReadOnlyList<CraftingLootItem> EnrichCraftingNames(IReadOnlyList<CraftingLootItem> items, IReadOnlyList<OwnedChampion>? champions, IReadOnlyList<OwnedSkin>? skins)
+    {
+        var championNames = champions?.ToDictionary(x => x.ChampionId, x => x.Name) ?? [];
+        var skinNames = skins?.ToDictionary(x => x.SkinId, x => x.Name) ?? [];
+        return items.Select(item =>
+        {
+            if (!string.IsNullOrWhiteSpace(item.LocalizedName)
+                && !item.LocalizedName.Equals(item.LootId, StringComparison.OrdinalIgnoreCase)
+                && !item.LocalizedName.Equals(item.LootName, StringComparison.OrdinalIgnoreCase)) return item;
+            if (!int.TryParse(item.ReferenceId, NumberStyles.Integer, CultureInfo.InvariantCulture, out var referenceId)) return item;
+            if (item.DisplayCategory == "Champion shards" && championNames.TryGetValue(referenceId, out var championName)) return item with { LocalizedName = $"{championName} shard" };
+            if (item.DisplayCategory == "Skin shards" && skinNames.TryGetValue(referenceId, out var skinName)) return item with { LocalizedName = $"{skinName} shard" };
+            return item;
+        }).ToArray();
+    }
+
+    private static string FirstNonBlank(params string?[] values) => values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim() ?? "Unknown item";
+    private static string? GetScalarString(JsonElement element, string property)
+    {
+        if (!element.TryGetProperty(property, out var value)) return null;
+        return value.ValueKind == JsonValueKind.String ? value.GetString() : value.ValueKind == JsonValueKind.Number ? value.GetRawText() : null;
+    }
+
+    private static DateTimeOffset? ParseEpoch(long? value)
+    {
+        if (!value.HasValue || value <= 0) return null;
+        try { return value > 10_000_000_000 ? DateTimeOffset.FromUnixTimeMilliseconds(value.Value) : DateTimeOffset.FromUnixTimeSeconds(value.Value); }
+        catch (ArgumentOutOfRangeException) { return null; }
+    }
+
+    internal static bool IsSafeAssetPath(string? path) => !string.IsNullOrWhiteSpace(path)
+        && path.StartsWith('/') && !path.Contains("..", StringComparison.Ordinal) && !path.Contains('\\')
+        && !Uri.TryCreate(path, UriKind.Absolute, out _);
 
     private static async Task<MatchSnapshotResult> FetchLatestMatchAsync(HttpClient client, string puuid, CancellationToken cancellationToken)
     {

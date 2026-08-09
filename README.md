@@ -24,6 +24,8 @@ The master password must contain at least 8 Unicode characters; a 12+ character 
 
 SummonersVault never logs in for you, sends credentials to Riot, modifies the client or game, or requires a Riot API key. Its LCU connection is loopback-only and read-only. LCU endpoints are unsupported community interfaces and can change without notice.
 
+Champion, skin, rank, wallet, and crafting snapshots are read from the signed-in local League Client. Public champion, skin, and loot artwork can be downloaded from CommunityDragon and is cached locally up to 256 MB. These requests contain only public asset paths - no account identifiers, credentials, PUUIDs, or League Client tokens are sent. CommunityDragon downloads can be disabled and the cache can be cleared in Settings.
+
 ### Why login is not automated
 
 SummonersVault deliberately does not automatically enter credentials or submit the Riot Client login form. Riot's [Terms of Service](https://www.riotgames.com/en/terms-of-service) broadly prohibit unauthorized automation programs that interact with Riot Services. Even though password autofill would provide no gameplay advantage, Riot does not publicly identify this use as authorized. Avoiding login automation reduces the risk of users receiving account penalties, including a potential suspension or ban.

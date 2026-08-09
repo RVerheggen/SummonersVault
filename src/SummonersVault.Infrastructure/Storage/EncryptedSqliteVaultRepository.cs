@@ -158,6 +158,14 @@ public sealed class EncryptedSqliteVaultRepository(VaultPaths paths) : IVaultRep
             if (snapshot.Ranks is not null) { account.Ranks.Clear(); account.Ranks.AddRange(snapshot.Ranks); }
             if (snapshot.Champions is not null) { account.Champions.Clear(); account.Champions.AddRange(snapshot.Champions); }
             if (snapshot.Skins is not null) { account.Skins.Clear(); account.Skins.AddRange(OwnedSkinRules.Normalize(snapshot.Skins)); }
+            if (snapshot.CraftingLoot is not null) { account.LootItems.Clear(); account.LootItems.AddRange(snapshot.CraftingLoot); }
+
+            var attemptedAt = DateTimeOffset.UtcNow;
+            UpdateCategory(account, SnapshotCategory.Ranked, snapshot.Ranks is not null, attemptedAt);
+            UpdateCategory(account, SnapshotCategory.Wallet, snapshot.Wallet is { RiotPoints: not null, BlueEssence: not null }, attemptedAt);
+            UpdateCategory(account, SnapshotCategory.Champions, snapshot.Champions is not null, attemptedAt);
+            UpdateCategory(account, SnapshotCategory.Skins, snapshot.Skins is not null, attemptedAt);
+            UpdateCategory(account, SnapshotCategory.Crafting, snapshot.CraftingLoot is not null, attemptedAt);
 
             if (snapshot.Match.Succeeded)
             {
@@ -208,17 +216,24 @@ public sealed class EncryptedSqliteVaultRepository(VaultPaths paths) : IVaultRep
             ("$lastPlayed", Format(account.LastMatchPlayedAtUtc)), ("$matchId", account.LastMatchId), ("$matchSynced", Format(account.MatchHistorySyncedAtUtc)), ("$matchState", (int)account.MatchHistoryState),
             ("$riotPoints", account.RiotPoints), ("$blueEssence", account.BlueEssence)).ConfigureAwait(false);
 
-        foreach (var table in new[] { "ranks", "champions", "skins" })
+        foreach (var table in new[] { "ranks", "champions", "skins", "loot_items", "account_sync_categories" })
             await ExecuteAsync(connection, transaction, $"DELETE FROM {table} WHERE account_id=$id", cancellationToken, ("$id", account.Id.ToString("D"))).ConfigureAwait(false);
         foreach (var rank in account.Ranks)
-            await ExecuteAsync(connection, transaction, "INSERT INTO ranks(account_id,queue_type,tier,division,league_points,wins,losses) VALUES($id,$queue,$tier,$division,$lp,$wins,$losses)", cancellationToken,
-                ("$id", account.Id.ToString("D")), ("$queue", rank.QueueType), ("$tier", rank.Tier), ("$division", rank.Division), ("$lp", rank.LeaguePoints), ("$wins", rank.Wins), ("$losses", rank.Losses)).ConfigureAwait(false);
+            await ExecuteAsync(connection, transaction, "INSERT INTO ranks(account_id,queue_type,tier,division,league_points,wins,losses,is_provisional,provisional_games_remaining,rated_tier,rated_rating) VALUES($id,$queue,$tier,$division,$lp,$wins,$losses,$provisional,$remaining,$ratedTier,$rating)", cancellationToken,
+                ("$id", account.Id.ToString("D")), ("$queue", rank.QueueType), ("$tier", rank.Tier), ("$division", rank.Division), ("$lp", rank.LeaguePoints), ("$wins", rank.Wins), ("$losses", rank.Losses),
+                ("$provisional", rank.IsProvisional ? 1 : 0), ("$remaining", rank.ProvisionalGamesRemaining), ("$ratedTier", rank.RatedTier), ("$rating", rank.RatedRating)).ConfigureAwait(false);
         foreach (var champion in account.Champions)
-            await ExecuteAsync(connection, transaction, "INSERT INTO champions(account_id,champion_id,name) VALUES($id,$championId,$name)", cancellationToken,
-                ("$id", account.Id.ToString("D")), ("$championId", champion.ChampionId), ("$name", champion.Name)).ConfigureAwait(false);
+            await ExecuteAsync(connection, transaction, "INSERT INTO champions(account_id,champion_id,name,base_splash_path,square_portrait_path) VALUES($id,$championId,$name,$splash,$portrait)", cancellationToken,
+                ("$id", account.Id.ToString("D")), ("$championId", champion.ChampionId), ("$name", champion.Name), ("$splash", champion.BaseSplashAssetPath), ("$portrait", champion.SquarePortraitAssetPath)).ConfigureAwait(false);
         foreach (var skin in OwnedSkinRules.Normalize(account.Skins))
-            await ExecuteAsync(connection, transaction, "INSERT INTO skins(account_id,skin_id,champion_id,name) VALUES($id,$skinId,$championId,$name)", cancellationToken,
-                ("$id", account.Id.ToString("D")), ("$skinId", skin.SkinId), ("$championId", skin.ChampionId), ("$name", skin.Name)).ConfigureAwait(false);
+            await ExecuteAsync(connection, transaction, "INSERT INTO skins(account_id,skin_id,champion_id,name,splash_path,tile_path) VALUES($id,$skinId,$championId,$name,$splash,$tile)", cancellationToken,
+                ("$id", account.Id.ToString("D")), ("$skinId", skin.SkinId), ("$championId", skin.ChampionId), ("$name", skin.Name), ("$splash", skin.SplashAssetPath), ("$tile", skin.TileAssetPath)).ConfigureAwait(false);
+        foreach (var loot in account.LootItems)
+            await ExecuteAsync(connection, transaction, "INSERT INTO loot_items(account_id,loot_id,loot_name,type,display_category,localized_name,localized_description,count,rarity,reference_id,asset_path,splash_path,tile_path,expires_at,disenchant_value,upgrade_essence_value) VALUES($id,$lootId,$lootName,$type,$category,$name,$description,$count,$rarity,$reference,$asset,$splash,$tile,$expires,$disenchant,$upgrade)", cancellationToken,
+                ("$id", account.Id.ToString("D")), ("$lootId", loot.LootId), ("$lootName", loot.LootName), ("$type", loot.Type), ("$category", loot.DisplayCategory), ("$name", loot.LocalizedName), ("$description", loot.LocalizedDescription), ("$count", loot.Count), ("$rarity", loot.Rarity), ("$reference", loot.ReferenceId), ("$asset", loot.AssetPath), ("$splash", loot.SplashAssetPath), ("$tile", loot.TileAssetPath), ("$expires", Format(loot.ExpiresAtUtc)), ("$disenchant", loot.DisenchantValue), ("$upgrade", loot.UpgradeEssenceValue)).ConfigureAwait(false);
+        foreach (var status in account.SyncCategories)
+            await ExecuteAsync(connection, transaction, "INSERT INTO account_sync_categories(account_id,category,state,last_attempt_at,last_success_at) VALUES($id,$category,$state,$attempt,$success)", cancellationToken,
+                ("$id", account.Id.ToString("D")), ("$category", (int)status.Category), ("$state", (int)status.State), ("$attempt", Format(status.LastAttemptAtUtc)), ("$success", Format(status.LastSuccessAtUtc))).ConfigureAwait(false);
         if (ownedTransaction is not null) await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -239,27 +254,41 @@ public sealed class EncryptedSqliteVaultRepository(VaultPaths paths) : IVaultRep
     {
         await using (var command = connection.CreateCommand())
         {
-            command.CommandText = "SELECT queue_type,tier,division,league_points,wins,losses FROM ranks WHERE account_id=$id";
+            command.CommandText = "SELECT queue_type,tier,division,league_points,wins,losses,is_provisional,provisional_games_remaining,rated_tier,rated_rating FROM ranks WHERE account_id=$id";
             command.Parameters.AddWithValue("$id", account.Id.ToString("D"));
             await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) account.Ranks.Add(new(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5)));
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) account.Ranks.Add(new(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5), reader.GetInt32(6) != 0, NullableInt32(reader, 7), NullableString(reader, 8), NullableInt32(reader, 9)));
         }
         await using (var command = connection.CreateCommand())
         {
-            command.CommandText = "SELECT champion_id,name FROM champions WHERE account_id=$id";
+            command.CommandText = "SELECT champion_id,name,base_splash_path,square_portrait_path FROM champions WHERE account_id=$id";
             command.Parameters.AddWithValue("$id", account.Id.ToString("D"));
             await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) account.Champions.Add(new(reader.GetInt32(0), reader.GetString(1)));
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) account.Champions.Add(new(reader.GetInt32(0), reader.GetString(1), NullableString(reader, 2), NullableString(reader, 3)));
         }
         await using (var command = connection.CreateCommand())
         {
-            command.CommandText = "SELECT skin_id,champion_id,name FROM skins WHERE account_id=$id";
+            command.CommandText = "SELECT skin_id,champion_id,name,splash_path,tile_path FROM skins WHERE account_id=$id";
             command.Parameters.AddWithValue("$id", account.Id.ToString("D"));
             await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
             var skins = new List<OwnedSkin>();
             while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-                skins.Add(new OwnedSkin(reader.GetInt32(0), reader.GetInt32(1), reader.GetString(2)));
+                skins.Add(new OwnedSkin(reader.GetInt32(0), reader.GetInt32(1), reader.GetString(2), NullableString(reader, 3), NullableString(reader, 4)));
             account.Skins.AddRange(OwnedSkinRules.Normalize(skins));
+        }
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT loot_id,loot_name,type,display_category,localized_name,localized_description,count,rarity,reference_id,asset_path,splash_path,tile_path,expires_at,disenchant_value,upgrade_essence_value FROM loot_items WHERE account_id=$id";
+            command.Parameters.AddWithValue("$id", account.Id.ToString("D"));
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) account.LootItems.Add(new(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4), NullableString(reader, 5), reader.GetInt32(6), NullableString(reader, 7), NullableString(reader, 8), NullableString(reader, 9), NullableString(reader, 10), NullableString(reader, 11), ParseDate(reader, 12), NullableInt32(reader, 13), NullableInt32(reader, 14)));
+        }
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT category,state,last_attempt_at,last_success_at FROM account_sync_categories WHERE account_id=$id";
+            command.Parameters.AddWithValue("$id", account.Id.ToString("D"));
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) account.SyncCategories.Add(new((SnapshotCategory)reader.GetInt32(0), (SnapshotState)reader.GetInt32(1), ParseDate(reader, 2), ParseDate(reader, 3)));
         }
     }
 
@@ -317,6 +346,15 @@ public sealed class EncryptedSqliteVaultRepository(VaultPaths paths) : IVaultRep
             UPDATE schema_info SET version=3 WHERE version<3;
             """;
         await ExecuteAsync(connection, null, normalizeRegionsSql, cancellationToken).ConfigureAwait(false);
+        await EnsureTableColumnAsync(connection, "champions", "base_splash_path", "TEXT", cancellationToken).ConfigureAwait(false);
+        await EnsureTableColumnAsync(connection, "champions", "square_portrait_path", "TEXT", cancellationToken).ConfigureAwait(false);
+        await EnsureTableColumnAsync(connection, "skins", "splash_path", "TEXT", cancellationToken).ConfigureAwait(false);
+        await EnsureTableColumnAsync(connection, "skins", "tile_path", "TEXT", cancellationToken).ConfigureAwait(false);
+        await EnsureTableColumnAsync(connection, "ranks", "is_provisional", "INTEGER NOT NULL DEFAULT 0", cancellationToken).ConfigureAwait(false);
+        await EnsureTableColumnAsync(connection, "ranks", "provisional_games_remaining", "INTEGER", cancellationToken).ConfigureAwait(false);
+        await EnsureTableColumnAsync(connection, "ranks", "rated_tier", "TEXT", cancellationToken).ConfigureAwait(false);
+        await EnsureTableColumnAsync(connection, "ranks", "rated_rating", "INTEGER", cancellationToken).ConfigureAwait(false);
+        await ExecuteAsync(connection, null, SchemaV4Sql, cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task EnsureColumnAsync(SqliteConnection connection, string columnName, string columnType, CancellationToken cancellationToken)
@@ -326,6 +364,23 @@ public sealed class EncryptedSqliteVaultRepository(VaultPaths paths) : IVaultRep
         command.Parameters.AddWithValue("$name", columnName);
         var exists = Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false), CultureInfo.InvariantCulture) > 0;
         if (!exists) await ExecuteAsync(connection, null, $"ALTER TABLE accounts ADD COLUMN {columnName} {columnType}", cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task EnsureTableColumnAsync(SqliteConnection connection, string table, string column, string type, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name=$name";
+        command.Parameters.AddWithValue("$name", column);
+        var exists = Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false), CultureInfo.InvariantCulture) > 0;
+        if (!exists) await ExecuteAsync(connection, null, $"ALTER TABLE {table} ADD COLUMN {column} {type}", cancellationToken).ConfigureAwait(false);
+    }
+
+    private static void UpdateCategory(VaultAccount account, SnapshotCategory category, bool succeeded, DateTimeOffset attemptedAt)
+    {
+        var previous = account.SyncCategories.FirstOrDefault(x => x.Category == category);
+        account.SyncCategories.RemoveAll(x => x.Category == category);
+        account.SyncCategories.Add(new(category, succeeded ? SnapshotState.Current : previous?.LastSuccessAtUtc is null ? SnapshotState.Unknown : SnapshotState.Stale,
+            attemptedAt, succeeded ? attemptedAt : previous?.LastSuccessAtUtc));
     }
 
     private const string AccountSelect = "SELECT id,login_identifier,password,label,region,notes,roles,created_at,modified_at,puuid,summoner_id,riot_game_name,riot_tag_line,profile_icon_id,profile_icon,summoner_level,last_synced_at,last_match_played_at,last_match_id,match_history_synced_at,match_history_state,riot_points,blue_essence FROM accounts";
@@ -342,5 +397,14 @@ public sealed class EncryptedSqliteVaultRepository(VaultPaths paths) : IVaultRep
         CREATE TABLE IF NOT EXISTS ranks(account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE, queue_type TEXT NOT NULL, tier TEXT NOT NULL, division TEXT NOT NULL, league_points INTEGER NOT NULL, wins INTEGER NOT NULL, losses INTEGER NOT NULL, PRIMARY KEY(account_id,queue_type));
         CREATE TABLE IF NOT EXISTS champions(account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE, champion_id INTEGER NOT NULL, name TEXT NOT NULL, PRIMARY KEY(account_id,champion_id));
         CREATE TABLE IF NOT EXISTS skins(account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE, skin_id INTEGER NOT NULL, champion_id INTEGER NOT NULL, name TEXT NOT NULL, PRIMARY KEY(account_id,skin_id));
+        """;
+
+    private const string SchemaV4Sql = """
+        CREATE TABLE IF NOT EXISTS loot_items(account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE, loot_id TEXT NOT NULL, loot_name TEXT NOT NULL, type TEXT NOT NULL, display_category TEXT NOT NULL, localized_name TEXT NOT NULL, localized_description TEXT, count INTEGER NOT NULL, rarity TEXT, reference_id TEXT, asset_path TEXT, splash_path TEXT, tile_path TEXT, expires_at TEXT, disenchant_value INTEGER, upgrade_essence_value INTEGER, PRIMARY KEY(account_id,loot_id));
+        CREATE INDEX IF NOT EXISTS ix_loot_account_type ON loot_items(account_id,type);
+        CREATE INDEX IF NOT EXISTS ix_loot_account_category ON loot_items(account_id,display_category);
+        CREATE INDEX IF NOT EXISTS ix_loot_account_name ON loot_items(account_id,localized_name COLLATE NOCASE);
+        CREATE TABLE IF NOT EXISTS account_sync_categories(account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE, category INTEGER NOT NULL, state INTEGER NOT NULL, last_attempt_at TEXT, last_success_at TEXT, PRIMARY KEY(account_id,category));
+        UPDATE schema_info SET version=4 WHERE version<4;
         """;
 }

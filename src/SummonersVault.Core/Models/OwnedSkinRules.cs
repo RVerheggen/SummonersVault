@@ -13,7 +13,7 @@ public static class OwnedSkinRules
             var championId = skin.ChampionId - AlternateChampionIdOffset;
             var skinId = skin.SkinId - AlternateSkinIdOffset;
             if (championId > 0 && skinId > 0 && skinId / 1000 == championId)
-                return new OwnedSkin(skinId, championId, skin.Name);
+                return skin with { SkinId = skinId, ChampionId = championId };
         }
 
         return skin;

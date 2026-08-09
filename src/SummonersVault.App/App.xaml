@@ -1,13 +1,15 @@
 <Application x:Class="SummonersVault.App.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:converters="clr-namespace:SummonersVault.App.Converters"
              ShutdownMode="OnMainWindowClose">
     <Application.Resources>
         <ResourceDictionary>
+            <converters:NullToVisibilityConverter x:Key="NullVisibility"/>
+            <converters:ByteArrayImageConverter x:Key="ImageConverter"/>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="Themes/Theme.xaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>
 </Application>
-

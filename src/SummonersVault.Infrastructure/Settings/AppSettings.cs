@@ -9,6 +9,7 @@ public sealed class AppSettings
     public int? AutoLockMinutes { get; set; } = 10;
     public bool LockOnSessionLockOrSleep { get; set; } = true;
     public string? LeagueInstallDirectory { get; set; }
+    public bool DownloadCommunityDragonArtwork { get; set; } = true;
 }
 
 public sealed class AppSettingsStore(VaultPaths paths)
@@ -34,4 +35,3 @@ public sealed class AppSettingsStore(VaultPaths paths)
 
 [JsonSerializable(typeof(AppSettings))]
 internal sealed partial class AppSettingsJsonContext : JsonSerializerContext;
-

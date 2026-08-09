@@ -16,6 +16,8 @@ public partial class SettingsWindow : Window
         InitializeComponent(); DarkTitleBar.Attach(this); _viewModel = viewModel;
         SessionLock.IsChecked = viewModel.Settings.LockOnSessionLockOrSleep;
         LeaguePath.Text = viewModel.Settings.LeagueInstallDirectory;
+        CommunityDragonDownloads.IsChecked = viewModel.Settings.DownloadCommunityDragonArtwork;
+        UpdateCacheSize();
         foreach (ComboBoxItem item in AutoLock.Items)
             if ((viewModel.Settings.AutoLockMinutes is null && Equals(item.Tag, "never")) || Equals(item.Tag?.ToString(), viewModel.Settings.AutoLockMinutes?.ToString())) { AutoLock.SelectedItem = item; break; }
     }
@@ -32,7 +34,7 @@ public partial class SettingsWindow : Window
         {
             var selection = (ComboBoxItem?)AutoLock.SelectedItem;
             int? minutes = Equals(selection?.Tag, "never") ? null : int.TryParse(selection?.Tag?.ToString(), out var value) ? value : 10;
-            await _viewModel.SaveSettingsAsync(new AppSettings { AutoLockMinutes = minutes, LockOnSessionLockOrSleep = SessionLock.IsChecked == true, LeagueInstallDirectory = string.IsNullOrWhiteSpace(LeaguePath.Text) ? null : LeaguePath.Text.Trim() });
+            await _viewModel.SaveSettingsAsync(new AppSettings { AutoLockMinutes = minutes, LockOnSessionLockOrSleep = SessionLock.IsChecked == true, LeagueInstallDirectory = string.IsNullOrWhiteSpace(LeaguePath.Text) ? null : LeaguePath.Text.Trim(), DownloadCommunityDragonArtwork = CommunityDragonDownloads.IsChecked == true });
             if (CurrentPassword.SecurePassword.Length + NewPassword.SecurePassword.Length + ConfirmPassword.SecurePassword.Length > 0)
             {
                 if (CurrentPassword.SecurePassword.Length == 0 || NewPassword.SecurePassword.Length == 0 || ConfirmPassword.SecurePassword.Length == 0) throw new ArgumentException("Complete all master-password fields.");
@@ -42,4 +44,7 @@ public partial class SettingsWindow : Window
         }
         catch (Exception ex) when (ex is ArgumentException or UnauthorizedAccessException or InvalidDataException) { MessageBox.Show(this, ex.Message, "Settings", MessageBoxButton.OK, MessageBoxImage.Warning); }
     }
+
+    private async void ClearArtwork_Click(object sender, RoutedEventArgs e) { await _viewModel.Artwork.ClearAsync(); UpdateCacheSize(); }
+    private void UpdateCacheSize() => CacheSize.Text = $"Artwork cache: {_viewModel.Artwork.GetCacheSizeBytes() / 1024d / 1024d:N1} MB of 256 MB";
 }

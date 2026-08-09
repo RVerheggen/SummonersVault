@@ -19,7 +19,8 @@ public sealed partial class MainViewModel(
     ILeagueClientGateway league,
     AppSettingsStore settingsStore,
     IBackupService backup,
-    SafeClipboardService clipboard) : ObservableObject, IAsyncDisposable
+    SafeClipboardService clipboard,
+    IArtworkService artwork) : ObservableObject, IAsyncDisposable
 {
     private readonly List<VaultAccount> _accounts = [];
     private CancellationTokenSource? _searchDelay;
@@ -53,6 +54,7 @@ public sealed partial class MainViewModel(
     public ObservableCollection<string> ChampionSuggestions { get; } = [];
     public ObservableCollection<string> SkinSuggestions { get; } = [];
     public IBackupService Backup => backup;
+    public IArtworkService Artwork => artwork;
     public bool IsOnboarding => State == ShellState.Onboarding;
     public bool IsLocked => State == ShellState.Locked;
     public bool IsVault => State == ShellState.Vault;
@@ -265,10 +267,12 @@ public sealed partial class MainViewModel(
 
     private static string DescribeMissingSyncData(LeagueSnapshot snapshot)
     {
-        var missing = new List<string>(3);
+        var missing = new List<string>(5);
+        if (snapshot.Ranks is null) missing.Add("ranked data");
         if (snapshot.Champions is null) missing.Add("champion inventory");
         if (snapshot.Skins is null) missing.Add("skin inventory");
         if (snapshot.Wallet is not { RiotPoints: not null, BlueEssence: not null }) missing.Add("wallet data");
+        if (snapshot.CraftingLoot is null) missing.Add("crafting inventory");
         return missing.Count == 0 ? "League data" : string.Join(", ", missing);
     }
 
@@ -381,6 +385,7 @@ public sealed partial class MainViewModel(
         _searchDelay?.Cancel(); _searchDelay?.Dispose();
         clipboard.ClearOwned();
         await session.DisposeAsync();
+        if (artwork is IDisposable disposableArtwork) disposableArtwork.Dispose();
     }
 }
 

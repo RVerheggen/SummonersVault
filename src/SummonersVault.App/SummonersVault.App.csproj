@@ -14,8 +14,7 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
   </ItemGroup>
   <ItemGroup>
-    <Resource Include="Assets\blue-essence.png" />
-    <Resource Include="Assets\rp.png" />
+    <Resource Include="Assets\Currencies\*.png" />
     <Resource Include="Assets\RankIcons\*.png" />
   </ItemGroup>
 </Project>

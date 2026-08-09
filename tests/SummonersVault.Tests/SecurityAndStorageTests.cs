@@ -6,6 +6,7 @@ using SummonersVault.Core.Abstractions;
 using SummonersVault.Core.Services;
 using SummonersVault.Infrastructure.League;
 using SummonersVault.Infrastructure.Backup;
+using SummonersVault.Infrastructure.Artwork;
 using SummonersVault.Infrastructure.Security;
 using SummonersVault.Infrastructure.Storage;
 using Xunit;
@@ -159,10 +160,10 @@ public sealed class SecurityAndStorageTests
     }
 
     [Theory]
-    [InlineData("[]", false)]
+    [InlineData("[]", true)]
     [InlineData("[{}]", true)]
     [InlineData("{}", false)]
-    public void InventoryReadiness_RequiresAPopulatedCatalog(string json, bool expected)
+    public void InventoryReadiness_AcceptsSuccessfulEmptyCategories(string json, bool expected)
     {
         using var document = System.Text.Json.JsonDocument.Parse(json);
         Assert.Equal(expected, LeagueClientGateway.IsInventoryPayloadReady(document.RootElement));
@@ -213,8 +214,77 @@ public sealed class SecurityAndStorageTests
         Assert.True(new LeagueSnapshot
         {
             Puuid = "puuid", RiotGameName = "Player", RiotTagLine = "EUW", Region = "EUW1",
-            Champions = [], Skins = [], Wallet = new(0, 0)
+            Champions = [], Skins = [], Ranks = [], CraftingLoot = [], Wallet = new(0, 0)
         }.HasCompleteSyncData);
+    }
+
+    [Fact]
+    public void LootParser_ExcludesZeroCounts_AndPreservesGenericMetadata()
+    {
+        using var document = System.Text.Json.JsonDocument.Parse("""[{"lootId":"CHAMPION_RENTAL_1","lootName":"Champion shard","type":"CHAMPION_RENTAL","displayCategories":"Champion shards","localizedName":"Annie champion shard","count":2,"rarity":"Epic","refId":"1","tilePath":"/lol-game-data/assets/v1/champion-tiles/1/1000.jpg","disenchantValue":90,"upgradeEssenceValue":450},{"lootId":"empty","count":0}]""");
+        var loot = Assert.Single(LeagueClientGateway.ParseCraftingLoot(document.RootElement));
+        Assert.Equal("Annie champion shard", loot.LocalizedName);
+        Assert.Equal(2, loot.Count);
+        Assert.Equal(90, loot.DisenchantValue);
+        Assert.Equal("Champion shards", loot.DisplayCategory);
+    }
+
+    [Fact]
+    public void LootParser_NormalizesLcuCategories_AndBlankNames()
+    {
+        using var document = System.Text.Json.JsonDocument.Parse("""[{"lootId":"skin-1","lootName":"PROJECT_WARWICK","type":"SKIN","displayCategories":"SKIN","localizedName":"","count":1,"refId":700161}]""");
+        var loot = Assert.Single(LeagueClientGateway.ParseCraftingLoot(document.RootElement));
+        Assert.Equal("Skin shards", loot.DisplayCategory);
+        Assert.Equal("PROJECT_WARWICK", loot.LocalizedName);
+        Assert.Equal("700161", loot.ReferenceId);
+    }
+
+    [Theory]
+    [InlineData("CURRENCY_champion", "Blue Essence")]
+    [InlineData("CURRENCY_cosmetic", "Orange Essence")]
+    public void LootParser_UsesFriendlyEssenceNames(string lootName, string expected)
+    {
+        using var document = System.Text.Json.JsonDocument.Parse($$"""[{"lootId":"{{lootName}}","lootName":"{{lootName}}","type":"CURRENCY","count":10}]""");
+        Assert.Equal(expected, Assert.Single(LeagueClientGateway.ParseCraftingLoot(document.RootElement)).LocalizedName);
+    }
+
+    [Theory]
+    [InlineData("/lol-game-data/assets/v1/champion-splashes/1/1000.jpg", true)]
+    [InlineData("/lol-game-data/assets/../secret", false)]
+    [InlineData("https://example.com/image.png", false)]
+    public void ArtworkMapping_AllowsOnlyDocumentedPublicPaths(string path, bool expected)
+    {
+        Assert.Equal(expected, ArtworkCacheService.TryMapCommunityDragon(path, out var uri));
+        if (expected) Assert.Equal("raw.communitydragon.org", uri.Host);
+    }
+
+    [Fact]
+    public async Task SchemaV4_PreservesRichSnapshots_AndMarksFailedCategoriesStale()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "SummonersVaultTests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var paths = new VaultPaths(root); await using var repository = new EncryptedSqliteVaultRepository(paths);
+            await repository.OpenAsync(RandomNumberGenerator.GetBytes(32), create: true);
+            var account = new VaultAccount { LoginIdentifier = "rich", PasswordUtf8 = "secret"u8.ToArray(), Region = "EUW" };
+            await repository.SaveAccountAsync(account);
+            await repository.ApplyLeagueSnapshotAsync(account.Id, new LeagueSnapshot
+            {
+                Puuid = "rich-puuid", RiotGameName = "Player", RiotTagLine = "EUW", Region = "EUW1",
+                Ranks = [new("RANKED_SOLO_5x5", "GOLD", "II", 44, 20, 10, true, 2)],
+                Champions = [new(1, "Annie", "/lol-game-data/assets/a.jpg", "/lol-game-data/assets/b.jpg")],
+                Skins = [new(1001, 1, "Goth Annie", "/lol-game-data/assets/c.jpg", "/lol-game-data/assets/d.jpg")],
+                CraftingLoot = [new("loot", "loot", "MATERIAL", "Materials", "Key", null, 3, "Rare", null, null, null, "/lol-game-data/assets/key.png", null, 10, 20)],
+                Wallet = new(100, 200)
+            });
+            await repository.ApplyLeagueSnapshotAsync(account.Id, Snapshot(MatchSnapshotResult.Failed));
+            var loaded = await repository.GetAccountAsync(account.Id);
+            Assert.Equal("/lol-game-data/assets/a.jpg", Assert.Single(loaded!.Champions).BaseSplashAssetPath);
+            Assert.True(Assert.Single(loaded.Ranks).IsProvisional);
+            Assert.Equal(3, Assert.Single(loaded.LootItems).Count);
+            Assert.All(loaded.SyncCategories, state => Assert.Equal(SnapshotState.Stale, state.State));
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
 
     [Fact]

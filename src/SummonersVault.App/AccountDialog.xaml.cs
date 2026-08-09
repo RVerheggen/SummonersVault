@@ -17,7 +17,6 @@ public partial class AccountDialog : Window
         InitializeComponent(); DarkTitleBar.Attach(this);
         _existing = account;
         DeleteButton.Visibility = account is null ? Visibility.Collapsed : Visibility.Visible;
-        LeaguePanel.Visibility = account?.Puuid is null ? Visibility.Collapsed : Visibility.Visible;
         if (account is null) return;
         Heading.Text = account.DisplayName;
         LabelText.Text = account.Label;
@@ -30,26 +29,7 @@ public partial class AccountDialog : Window
         MidRole.IsChecked = account.Roles.HasFlag(AccountRole.Mid);
         BotRole.IsChecked = account.Roles.HasFlag(AccountRole.Bot);
         SupportRole.IsChecked = account.Roles.HasFlag(AccountRole.Support);
-        LeagueIdentity.Text = string.IsNullOrWhiteSpace(account.RiotGameName) ? "Linked League profile" : $"{account.RiotGameName}#{account.RiotTagLine} · level {account.SummonerLevel}";
-        LeagueSummary.Text = account.Ranks.Count == 0 ? "Unranked" : string.Join(" · ", account.Ranks.Select(x => $"{x.QueueType.Replace("RANKED_", string.Empty, StringComparison.Ordinal)}: {x.Tier} {x.Division} {x.LeaguePoints} LP"));
-        if (RankIconCatalog.GetUri(account.CardRank?.Tier) is { } rankIcon)
-        {
-            RankIconImage.Source = new System.Windows.Media.Imaging.BitmapImage(rankIcon);
-            RankIconImage.Visibility = Visibility.Visible;
-            RankIconImage.ToolTip = account.CardRank is { } rank ? $"{rank.Tier} {rank.Division} · {rank.LeaguePoints} LP" : null;
-            System.Windows.Automation.AutomationProperties.SetName(RankIconImage, RankIconImage.ToolTip?.ToString() ?? "Rank icon");
-        }
-        RiotPointsValue.Text = FormatCurrencyValue(account.RiotPoints);
-        BlueEssenceValue.Text = FormatCurrencyValue(account.BlueEssence);
-        MatchSummary.Text = account.MatchHistoryState switch { MatchHistoryState.NeverPlayed => "Never played", MatchHistoryState.Unknown => "Match history not synced", MatchHistoryState.Stale => $"Last played {account.LastMatchPlayedAtUtc?.ToLocalTime():f} · data may be stale", _ => $"Last played {account.LastMatchPlayedAtUtc?.ToLocalTime():f}" };
-        var countedSkins = OwnedSkinRules.Normalize(account.Skins);
-        OwnershipSummary.Text = $"{account.Champions.Count} champions · {countedSkins.Count} skins owned · synced {account.LastSyncedAtUtc?.ToLocalTime():g}";
-        ChampionNames.Text = account.Champions.Count == 0 ? "No champion snapshot" : string.Join(", ", account.Champions.Select(x => x.Name));
-        SkinNames.Text = countedSkins.Count == 0 ? "No skin snapshot" : string.Join(", ", countedSkins.Select(x => x.Name));
     }
-
-    private static string FormatCurrencyValue(long? value) =>
-        value.HasValue ? value.Value.ToString("N0") : "Not synced";
 
     private void Save_Click(object sender, RoutedEventArgs e)
     {
