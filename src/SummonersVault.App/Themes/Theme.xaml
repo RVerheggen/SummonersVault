@@ -11,14 +11,7 @@
     <sys:Double x:Key="{x:Static SystemParameters.VerticalScrollBarButtonHeightKey}">64</sys:Double>
     <sys:Double x:Key="{x:Static SystemParameters.HorizontalScrollBarButtonWidthKey}">64</sys:Double>
 
-    <DrawingImage x:Key="AppIconImage">
-        <DrawingImage.Drawing><DrawingGroup>
-            <GeometryDrawing Brush="{StaticResource SurfaceMutedBrush}" Geometry="M 2,2 L 30,2 30,30 2,30 Z"><GeometryDrawing.Pen><Pen Brush="{StaticResource BorderBrush}" Thickness="1"/></GeometryDrawing.Pen></GeometryDrawing>
-            <GeometryDrawing Brush="{StaticResource HighlightBrush}" Geometry="M 16,5 L 27,16 16,27 5,16 Z"/>
-            <GeometryDrawing Brush="{StaticResource SurfaceMutedBrush}" Geometry="M 16,9 L 23,16 16,23 9,16 Z"/>
-            <GeometryDrawing Brush="{StaticResource PrimaryBrush}" Geometry="M 16,12 L 20,16 16,20 12,16 Z"/>
-        </DrawingGroup></DrawingImage.Drawing>
-    </DrawingImage>
+    <BitmapImage x:Key="AppIconImage" UriSource="/SummonersVault.App;component/Assets/AppIcon.ico" CacheOption="OnLoad"/>
 
     <Style x:Key="AppWindow" TargetType="Window">
         <Setter Property="Background" Value="{StaticResource BackgroundBrush}"/><Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/><Setter Property="Icon" Value="{StaticResource AppIconImage}"/><Setter Property="FontFamily" Value="Segoe UI Variable, Segoe UI"/><Setter Property="TextOptions.TextFormattingMode" Value="Display"/>

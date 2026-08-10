@@ -23,10 +23,9 @@
                 <Grid>
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <StackPanel Orientation="Horizontal">
-                        <Border Width="52" Height="52" CornerRadius="14" Background="{StaticResource SurfaceMutedBrush}" BorderBrush="{StaticResource HighlightBrush}" BorderThickness="1">
-                            <TextBlock Text="SV" Foreground="{StaticResource HighlightBrush}" FontSize="22" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <StackPanel Margin="14,7,0,0"><TextBlock Text="SUMMONERSVAULT" FontWeight="SemiBold"/><TextBlock Text="LOCAL LEAGUE VAULT" Style="{StaticResource MutedText}" FontSize="11"/></StackPanel>
+                        <Image Source="{StaticResource AppIconImage}" Width="56" Height="56" Stretch="Uniform"
+                               RenderOptions.BitmapScalingMode="HighQuality" AutomationProperties.Name="SummonersVault application icon"/>
+                        <StackPanel Margin="14,0,0,0" VerticalAlignment="Center"><TextBlock Text="SUMMONERSVAULT" FontWeight="SemiBold"/><TextBlock Text="LOCAL LEAGUE VAULT" Style="{StaticResource MutedText}" FontSize="11"/></StackPanel>
                     </StackPanel>
                     <StackPanel Grid.Row="1" VerticalAlignment="Center">
                         <TextBlock Text="Every summoner.&#10;One quiet vault." FontSize="40" FontWeight="SemiBold" LineHeight="48"/>

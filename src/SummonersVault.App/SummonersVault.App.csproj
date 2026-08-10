@@ -30,5 +30,6 @@
     <Resource Include="Assets\AppIcon.ico" />
     <Resource Include="Assets\Currencies\*.png" />
     <Resource Include="Assets\RankIcons\*.png" />
+    <None Update="Assets\Branding\AppIcon-1254.png" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" />
   </ItemGroup>
 </Project>
