@@ -138,7 +138,7 @@ public sealed class RankCardItem
     private readonly RankSnapshot rank;
     public RankCardItem(RankSnapshot rank) { this.rank = rank; }
     public RankSnapshot Rank => rank;
-    public string Queue => rank.QueueType switch { "RANKED_SOLO_5x5" => "Solo / Duo", "RANKED_FLEX_SR" => "Ranked Flex", _ => rank.QueueType.Replace('_', ' ') };
+    public string Queue => rank.QueueType switch { "RANKED_SOLO_5x5" => "Solo / Duo", "RANKED_FLEX_SR" => "Ranked Flex", "JADE_RANKED_SOLO_5x5" or "JADE_SOLO_5x5" => "League Classic Solo / Duo", _ => rank.QueueType.Replace('_', ' ') };
     private bool HasRatedRank => !string.IsNullOrWhiteSpace(rank.RatedTier) && !rank.RatedTier.Equals("NONE", StringComparison.OrdinalIgnoreCase) && rank.RatedRating is > 0;
     public string RankText => HasRatedRank ? $"{Title(rank.RatedTier!)} · {rank.RatedRating:N0} rating" : IsUnranked ? "Unranked" : $"{Title(rank.Tier)} {rank.Division} · {rank.LeaguePoints} LP";
     public string Record => $"{rank.Wins} wins · {rank.Losses} losses · {rank.Wins + rank.Losses} games";

@@ -35,7 +35,7 @@
                         <TextBlock Text="◇  Read-only League Client sync" Margin="0,0,0,10"/>
                         <TextBlock Text="◇  No telemetry or cloud account"/>
                     </StackPanel>
-                    <TextBlock Grid.Row="2" Text="LOCAL  •  ENCRYPTED  •  WINDOWS 11" Foreground="{StaticResource HighlightBrush}" FontSize="11" FontWeight="SemiBold"/>
+                    <TextBlock Grid.Row="2" Text="LOCAL  •  ENCRYPTED" Foreground="{StaticResource HighlightBrush}" FontSize="11" FontWeight="SemiBold"/>
                 </Grid>
             </Border>
         </DataTemplate>
