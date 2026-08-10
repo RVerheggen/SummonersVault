@@ -66,7 +66,17 @@ public partial class MainWindow : Window
     private void ClearFilters_Click(object sender, RoutedEventArgs e) => _viewModel.ClearFilters();
     private void Sort_SelectionChanged(object sender, SelectionChangedEventArgs e) { if (_viewModel is not null) _viewModel.SortRecentlyPlayed = ((ComboBox)sender).SelectedIndex == 1; }
     private void Settings_Click(object sender, RoutedEventArgs e) => new SettingsWindow(_viewModel) { Owner = this }.ShowDialog();
-    private void About_Click(object sender, RoutedEventArgs e) => MessageBox.Show(this, "SummonersVault is a free, local-only community password manager and League companion.\n\nSummonersVault isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games and all associated properties are trademarks or registered trademarks of Riot Games, Inc.\n\nNo credentials are sent to Riot by this app.", "About SummonersVault", MessageBoxButton.OK, MessageBoxImage.Information);
+    private void About_Click(object sender, RoutedEventArgs e) => MessageBox.Show(this, $"SummonersVault { _viewModel.CurrentVersion }\n\nSummonersVault is a free, local-only community password manager and League companion.\n\nSummonersVault isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games and all associated properties are trademarks or registered trademarks of Riot Games, Inc.\n\nNo credentials are sent to Riot by this app.", "About SummonersVault", MessageBoxButton.OK, MessageBoxImage.Information);
+
+    internal async void BeginAutomaticUpdateCheck()
+    {
+        if (!_viewModel.ShouldRunAutomaticUpdateCheck(DateTimeOffset.UtcNow)) return;
+        await Task.Delay(TimeSpan.FromSeconds(2));
+        if (!IsVisible) return;
+        var result = await _viewModel.CheckForUpdatesAsync(manual: false);
+        if (result.Update is not null)
+            new UpdateAvailableWindow(_viewModel, result.Update) { Owner = this }.ShowDialog();
+    }
 
     private async void Backup_Click(object sender, RoutedEventArgs e)
     {

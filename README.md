@@ -18,6 +18,25 @@ Create a self-contained folder release with:
 dotnet publish src/SummonersVault.App/SummonersVault.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false
 ```
 
+## Install and update
+
+Public releases provide two Windows 11 x64 downloads:
+
+- `SummonersVault.Desktop-win-Setup.exe` is the recommended per-user installer. It requires no administrator access and installs application files beneath `%LOCALAPPDATA%\SummonersVault.Desktop`.
+- `SummonersVault.Desktop-win-Portable.zip` is intended for advanced users and testers.
+
+Both packages are self-contained and do not require a separate .NET installation. Vault data remains beneath `%LOCALAPPDATA%\SummonersVault` and is not replaced by application updates.
+
+SummonersVault can check the public GitHub Releases feed shortly after startup, at most once every 24 hours. It does not run an update service or background process while closed. Update downloads and installation always require user approval, and automatic checks can be disabled in Settings. The installed version and a manual `Check for updates` action are always available in Settings.
+
+Releases are currently unsigned, so Windows may display a SmartScreen warning. Review the public source and release workflow before running the application. Each release includes SHA-256 checksums and GitHub build provenance. With the GitHub CLI installed, a downloaded artifact can be checked using:
+
+```powershell
+gh attestation verify .\SummonersVault.Desktop-win-Setup.exe -R RVerheggen/SummonersVault
+```
+
+See [the release guide](docs/releasing.md) for local packaging, checksum verification, and the public-release security checklist.
+
 ## Security model
 
 The master password must contain at least 8 Unicode characters; a 12+ character passphrase is recommended. There is no recovery key. The complete database is encrypted with a random key protected by an Argon2id-derived key and an AES-256-GCM envelope. See [docs/security.md](docs/security.md) for limitations.

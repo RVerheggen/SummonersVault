@@ -1,0 +1,119 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      VPK_VERSION: 1.2.0
+      RELEASE_DIR: artifacts/releases
+      PUBLISH_DIR: artifacts/publish/win-x64
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Validate version and release notes
+        id: release-version
+        shell: pwsh
+        run: |
+          if ("${{ github.event.repository.private }}" -eq "true") { throw "Public releases are disabled while the repository is private." }
+          git fetch origin main --no-tags
+          git merge-base --is-ancestor "${{ github.sha }}" origin/main
+          if ($LASTEXITCODE -ne 0) { throw "The release tag must point to a commit on main." }
+          $tagVersion = "${{ github.ref_name }}".TrimStart('v')
+          [xml]$project = Get-Content src/SummonersVault.App/SummonersVault.App.csproj
+          $projectVersion = [string]$project.Project.PropertyGroup.Version
+          if ($tagVersion -ne $projectVersion) { throw "Tag version $tagVersion does not match project version $projectVersion." }
+          if (-not (Test-Path RELEASE_NOTES.md) -or [string]::IsNullOrWhiteSpace((Get-Content RELEASE_NOTES.md -Raw))) { throw "RELEASE_NOTES.md is required." }
+          "version=$tagVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Restore
+        run: dotnet restore SummonersVault.slnx
+
+      - name: Test
+        run: dotnet test SummonersVault.slnx -c Release --no-restore
+
+      - name: Publish self-contained application
+        run: dotnet publish src/SummonersVault.App/SummonersVault.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o $env:PUBLISH_DIR
+
+      - name: Install pinned Velopack CLI
+        shell: pwsh
+        run: dotnet tool install --tool-path .tools vpk --version $env:VPK_VERSION
+
+      - name: Download previous release for delta generation
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $latestTag = gh release list --repo "${{ github.repository }}" --exclude-drafts --exclude-pre-releases --limit 1 --json tagName --jq '.[0].tagName'
+          if (-not [string]::IsNullOrWhiteSpace($latestTag)) {
+            .\.tools\vpk download github --repoUrl "https://github.com/${{ github.repository }}" --token $env:GITHUB_TOKEN --outputDir $env:RELEASE_DIR
+            if ($LASTEXITCODE -ne 0) { throw "Could not download the previous release." }
+          } else {
+            Write-Host "No previous stable release found. Building a full package only."
+          }
+
+      - name: Package installer and portable release
+        shell: pwsh
+        run: |
+          .\.tools\vpk pack `
+            --packId SummonersVault.Desktop `
+            --packTitle SummonersVault `
+            --packVersion "${{ steps.release-version.outputs.version }}" `
+            --packDir $env:PUBLISH_DIR `
+            --mainExe SummonersVault.App.exe `
+            --runtime win-x64 `
+            --icon src/SummonersVault.App/Assets/AppIcon.ico `
+            --releaseNotes RELEASE_NOTES.md `
+            --outputDir $env:RELEASE_DIR
+
+      - name: Generate SHA-256 checksums
+        shell: pwsh
+        run: |
+          $currentAssets = Get-Content "$env:RELEASE_DIR\assets.win.json" -Raw | ConvertFrom-Json
+          $releaseFiles = @($currentAssets.RelativeFileName) + 'releases.win.json'
+          $releaseFiles |
+            Sort-Object -Unique |
+            ForEach-Object {
+              $path = Join-Path $env:RELEASE_DIR $_
+              "$(Get-FileHash $path -Algorithm SHA256 | Select-Object -ExpandProperty Hash)  $_"
+            } |
+            Set-Content "$env:RELEASE_DIR\SHA256SUMS.txt"
+
+      - name: Attest installer and portable release
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: |
+            artifacts/releases/*-Setup.exe
+            artifacts/releases/*-Portable.zip
+
+      - name: Publish Velopack GitHub Release
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          .\.tools\vpk upload github `
+            --repoUrl "https://github.com/${{ github.repository }}" `
+            --token $env:GITHUB_TOKEN `
+            --outputDir $env:RELEASE_DIR `
+            --publish `
+            --releaseName "SummonersVault ${{ steps.release-version.outputs.version }}" `
+            --tag "${{ github.ref_name }}" `
+            --targetCommitish "${{ github.sha }}"
+          gh release upload "${{ github.ref_name }}" "$env:RELEASE_DIR\SHA256SUMS.txt" --clobber

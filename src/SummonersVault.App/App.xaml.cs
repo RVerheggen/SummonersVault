@@ -8,11 +8,21 @@ using SummonersVault.Infrastructure.League;
 using SummonersVault.Infrastructure.Security;
 using SummonersVault.Infrastructure.Settings;
 using SummonersVault.Infrastructure.Storage;
+using Velopack;
 
 namespace SummonersVault.App;
 
 public partial class App : Application
 {
+    [STAThread]
+    private static void Main()
+    {
+        VelopackApp.Build().Run();
+        var app = new App();
+        app.InitializeComponent();
+        app.Run();
+    }
+
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
@@ -24,10 +34,12 @@ public partial class App : Application
         var backup = new VaultBackupService(paths, session);
         var clipboard = new SafeClipboardService(Dispatcher);
         var artwork = new ArtworkCacheService(paths, league);
-        var viewModel = new MainViewModel(session, league, settingsStore, backup, clipboard, artwork);
+        var updates = new VelopackUpdateService();
+        var viewModel = new MainViewModel(session, league, settingsStore, backup, clipboard, artwork, updates);
         var window = new MainWindow(viewModel, artwork);
         MainWindow = window;
         window.Show();
         await viewModel.InitializeAsync();
+        window.BeginAutomaticUpdateCheck();
     }
 }

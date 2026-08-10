@@ -1,12 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.22000.0</TargetFramework>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\SummonersVault.Core\SummonersVault.Core.csproj" />
     <ProjectReference Include="..\..\src\SummonersVault.Infrastructure\SummonersVault.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\SummonersVault.App\SummonersVault.App.csproj" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio">
@@ -14,4 +15,3 @@
     </PackageReference>
   </ItemGroup>
 </Project>
-

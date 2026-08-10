@@ -10,6 +10,8 @@ public sealed class AppSettings
     public bool LockOnSessionLockOrSleep { get; set; } = true;
     public string? LeagueInstallDirectory { get; set; }
     public bool DownloadCommunityDragonArtwork { get; set; } = true;
+    public bool AutomaticallyCheckForUpdates { get; set; } = true;
+    public DateTimeOffset? LastUpdateCheckAtUtc { get; set; }
 }
 
 public sealed class AppSettingsStore(VaultPaths paths)

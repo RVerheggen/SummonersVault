@@ -14,19 +14,40 @@ namespace SummonersVault.App.ViewModels;
 
 public enum ShellState { Onboarding, Locked, Vault }
 
-public sealed partial class MainViewModel(
-    IVaultSession session,
-    ILeagueClientGateway league,
-    AppSettingsStore settingsStore,
-    IBackupService backup,
-    SafeClipboardService clipboard,
-    IArtworkService artwork) : ObservableObject, IAsyncDisposable
+public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 {
+    private readonly IVaultSession session;
+    private readonly ILeagueClientGateway league;
+    private readonly AppSettingsStore settingsStore;
+    private readonly IBackupService backup;
+    private readonly SafeClipboardService clipboard;
+    private readonly IArtworkService artwork;
+    private readonly IUpdateService updates;
+    private readonly UpdateWorkflow _updateWorkflow;
     private readonly List<VaultAccount> _accounts = [];
     private CancellationTokenSource? _searchDelay;
     private Guid? _pendingLeagueAccountId;
     private bool _pendingSignInNotified;
     private bool _clientStatusUpdateInProgress;
+
+    internal MainViewModel(
+        IVaultSession session,
+        ILeagueClientGateway league,
+        AppSettingsStore settingsStore,
+        IBackupService backup,
+        SafeClipboardService clipboard,
+        IArtworkService artwork,
+        IUpdateService updates)
+    {
+        this.session = session;
+        this.league = league;
+        this.settingsStore = settingsStore;
+        this.backup = backup;
+        this.clipboard = clipboard;
+        this.artwork = artwork;
+        this.updates = updates;
+        _updateWorkflow = new(updates);
+    }
 
     [ObservableProperty] private ShellState state;
     [ObservableProperty] private string query = string.Empty;
@@ -48,6 +69,8 @@ public sealed partial class MainViewModel(
     [ObservableProperty] private bool isClientConnected;
     [ObservableProperty] private bool showEmptyVault;
     [ObservableProperty] private bool showNoFilterResults;
+    [ObservableProperty] private string updateStatus = string.Empty;
+    [ObservableProperty] private bool isCheckingForUpdates;
     [ObservableProperty] private AppSettings settings = new();
     public ObservableCollection<AccountCardViewModel> Accounts { get; } = [];
     public ObservableCollection<string> RankSuggestions { get; } = [];
@@ -55,6 +78,9 @@ public sealed partial class MainViewModel(
     public ObservableCollection<string> SkinSuggestions { get; } = [];
     public IBackupService Backup => backup;
     public IArtworkService Artwork => artwork;
+    public string CurrentVersion => updates.CurrentVersion;
+    public bool UpdatesAvailable => updates.IsPackaged;
+    public string LastUpdateCheck => Settings.LastUpdateCheckAtUtc is { } last ? last.ToLocalTime().ToString("g") : "Never checked";
     public bool IsOnboarding => State == ShellState.Onboarding;
     public bool IsLocked => State == ShellState.Locked;
     public bool IsVault => State == ShellState.Vault;
@@ -77,6 +103,8 @@ public sealed partial class MainViewModel(
     public async Task InitializeAsync()
     {
         Settings = await settingsStore.LoadAsync();
+        UpdateStatus = updates.IsPackaged ? "Ready to check for updates" : "Updates unavailable in development builds";
+        OnPropertyChanged(nameof(LastUpdateCheck));
         if (league is LeagueClientGateway gateway) gateway.SetConfiguredInstallDirectory(Settings.LeagueInstallDirectory);
         State = session.Exists ? ShellState.Locked : ShellState.Onboarding;
         StatusMessage = session.Exists ? "Vault locked" : "Create your local vault";
@@ -287,6 +315,48 @@ public sealed partial class MainViewModel(
         await settingsStore.SaveAsync(updated);
         if (league is LeagueClientGateway gateway) gateway.SetConfiguredInstallDirectory(updated.LeagueInstallDirectory);
     }
+
+    internal bool ShouldRunAutomaticUpdateCheck(DateTimeOffset nowUtc) =>
+        _updateWorkflow.ShouldRunAutomaticCheck(Settings, nowUtc);
+
+    internal async Task<UpdateCheckResult> CheckForUpdatesAsync(bool manual, CancellationToken cancellationToken = default)
+    {
+        if (!manual && !ShouldRunAutomaticUpdateCheck(DateTimeOffset.UtcNow))
+            return new(UpdateCheckState.Unavailable, UpdateStatus);
+
+        IsCheckingForUpdates = true;
+        UpdateStatus = "Checking for updates...";
+        try
+        {
+            var result = await _updateWorkflow.CheckAsync(
+                Settings,
+                manual,
+                DateTimeOffset.UtcNow,
+                token => settingsStore.SaveAsync(Settings, token),
+                cancellationToken);
+            UpdateStatus = result.Message;
+            if (result.Succeeded)
+            {
+                OnPropertyChanged(nameof(LastUpdateCheck));
+            }
+            return result;
+        }
+        finally
+        {
+            IsCheckingForUpdates = false;
+        }
+    }
+
+    internal Task<UpdateDownloadResult> DownloadUpdateAsync(AvailableUpdate update, IProgress<int> progress, CancellationToken cancellationToken) =>
+        updates.DownloadAsync(update, progress, cancellationToken);
+
+    internal async Task PrepareForUpdateAsync()
+    {
+        if (IsVault) await LockAsync();
+        else clipboard.ClearOwned();
+    }
+
+    internal void ApplyUpdateAndRestart(AvailableUpdate update) => updates.ApplyAndRestart(update);
 
     public async Task ChangeMasterPasswordAsync(byte[] current, byte[] replacement, byte[] confirmation)
     {
