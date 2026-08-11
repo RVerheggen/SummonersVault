@@ -14,6 +14,8 @@
     <PublishTrimmed>false</PublishTrimmed>
     <PublishReadyToRun>false</PublishReadyToRun>
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+    <Copyright>Copyright (C) 2026 RVerheggen</Copyright>
+    <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\SummonersVault.Core\SummonersVault.Core.csproj" />
@@ -31,5 +33,9 @@
     <Resource Include="Assets\Currencies\*.png" />
     <Resource Include="Assets\RankIcons\*.png" />
     <None Update="Assets\Branding\AppIcon-1254.png" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" />
+    <None Include="..\..\LICENSE" Link="LICENSE" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="..\..\NOTICE" Link="NOTICE" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="..\..\TRADEMARKS.md" Link="TRADEMARKS.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="..\..\THIRD_PARTY_NOTICES.md" Link="THIRD_PARTY_NOTICES.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

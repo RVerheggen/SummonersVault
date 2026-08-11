@@ -37,6 +37,12 @@ gh attestation verify .\SummonersVault.Desktop-win-Setup.exe -R RVerheggen/Summo
 
 See [the release guide](docs/releasing.md) for local packaging, checksum verification, and the public-release security checklist.
 
+## License, forks, and branding
+
+SummonersVault source code is licensed under the [GNU General Public License version 3 only](LICENSE), except where another license or ownership notice is stated. Distributed modifications must remain available under GPLv3 and include the corresponding source code.
+
+The SummonersVault name and application icon identify the official project and are not licensed as branding for modified products. Forks and independently published builds must use a distinct user-facing name and icon, may accurately state that they are based on SummonersVault, and must not imply endorsement by the original project. See [the trademark and branding policy](TRADEMARKS.md), [project notice](NOTICE), and [third-party notices](THIRD_PARTY_NOTICES.md).
+
 ## Security model
 
 The master password must contain at least 8 Unicode characters; a 12+ character passphrase is recommended. There is no recovery key. The complete database is encrypted with a random key protected by an Argon2id-derived key and an AES-256-GCM envelope. See [docs/security.md](docs/security.md) for limitations.
