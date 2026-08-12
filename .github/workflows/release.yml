@@ -12,6 +12,7 @@ permissions:
 
 jobs:
   release:
+    if: github.event.created == true && github.event.deleted == false
     runs-on: windows-latest
     env:
       VPK_VERSION: 1.2.0
