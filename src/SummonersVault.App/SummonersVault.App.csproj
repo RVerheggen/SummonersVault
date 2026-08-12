@@ -8,7 +8,7 @@
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <!-- Required by the source-generated DWM LibraryImport in DarkTitleBar.cs. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <SelfContained>true</SelfContained>
     <PublishSingleFile>false</PublishSingleFile>
     <PublishTrimmed>false</PublishTrimmed>
