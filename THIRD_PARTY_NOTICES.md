@@ -43,6 +43,8 @@ referential use and fork requirements.
 | Component | Version | License | Project |
 | --- | --- | --- | --- |
 | CommunityToolkit.Mvvm | 8.4.2 | MIT | https://github.com/CommunityToolkit/dotnet |
+| MahApps.Metro.IconPacks.FontAwesome | 6.2.1 | MIT | https://github.com/MahApps/MahApps.Metro.IconPacks |
+| Font Awesome Free | 5.15.4, 6.7.2, and 7.1.0 | CC BY 4.0 (icons), SIL OFL 1.1 (fonts), MIT (code) | https://fontawesome.com/license/free |
 | Microsoft.Data.Sqlite.Core | 10.0.10 | MIT | https://github.com/dotnet/efcore |
 | Microsoft.Extensions.DependencyInjection | 10.0.0 | MIT | https://github.com/dotnet/runtime |
 | Microsoft.Extensions.DependencyInjection.Abstractions | 10.0.0 | MIT | https://github.com/dotnet/runtime |

@@ -1,6 +1,7 @@
 <Window x:Class="SummonersVault.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks"
         xmlns:vm="clr-namespace:SummonersVault.App.ViewModels"
         xmlns:controls="clr-namespace:SummonersVault.App.Controls"
         Title="SummonersVault" Width="1280" Height="760" MinWidth="1100" MinHeight="620"
@@ -13,6 +14,14 @@
         <Style x:Key="ClientStatusDot" TargetType="Ellipse">
             <Setter Property="Fill" Value="{StaticResource DangerBrush}"/>
             <Style.Triggers><DataTrigger Binding="{Binding IsClientConnected}" Value="True"><Setter Property="Fill" Value="{StaticResource SuccessBrush}"/></DataTrigger></Style.Triggers>
+        </Style>
+        <Style x:Key="SidebarIcon" TargetType="{x:Type iconPacks:PackIconFontAwesome}">
+            <Setter Property="Width" Value="16"/>
+            <Setter Property="Height" Value="16"/>
+            <Setter Property="Margin" Value="5,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="IsHitTestVisible" Value="False"/>
         </Style>
         <Style x:Key="FilterDropDownButton" TargetType="ToggleButton">
             <Setter Property="Background" Value="{StaticResource SurfaceMutedBrush}"/><Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/><Setter Property="BorderBrush" Value="{StaticResource InputBorderBrush}"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Padding" Value="12,8"/><Setter Property="Height" Value="40"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/>
@@ -82,10 +91,10 @@
                 <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <StackPanel><TextBlock Text="SV" Foreground="{StaticResource HighlightBrush}" FontSize="28" FontWeight="Bold"/><TextBlock Text="SUMMONERSVAULT" FontWeight="SemiBold" Margin="0,8,0,0"/><TextBlock Text="LOCAL LEAGUE VAULT" Style="{StaticResource MutedText}" FontSize="11"/></StackPanel>
                     <StackPanel Grid.Row="1" Margin="0,34,0,0">
-                        <Button Style="{StaticResource SidebarSelectedButton}" AutomationProperties.Name="Vault"><StackPanel Orientation="Horizontal"><TextBlock Text="◇" Width="26" TextAlignment="Center"/><TextBlock Text="Vault"/></StackPanel></Button>
-                        <Button Style="{StaticResource SidebarButton}" AutomationProperties.Name="Settings" Click="Settings_Click"><StackPanel Orientation="Horizontal"><TextBlock Text="⚙" Width="26" TextAlignment="Center"/><TextBlock Text="Settings"/></StackPanel></Button>
-                        <Button Style="{StaticResource SidebarButton}" AutomationProperties.Name="Import or export" Click="Backup_Click"><StackPanel Orientation="Horizontal"><TextBlock Text="⇅" Width="26" TextAlignment="Center"/><TextBlock Text="Import / Export"/></StackPanel></Button>
-                        <Button Style="{StaticResource SidebarButton}" AutomationProperties.Name="About" Click="About_Click"><StackPanel Orientation="Horizontal"><TextBlock Text="ⓘ" Width="26" TextAlignment="Center"/><TextBlock Text="About"/></StackPanel></Button>
+                        <Button Style="{StaticResource SidebarSelectedButton}" AutomationProperties.Name="Vault"><StackPanel Orientation="Horizontal"><iconPacks:PackIconFontAwesome Kind="ShieldHalvedSolid" Style="{StaticResource SidebarIcon}" Foreground="{StaticResource HighlightBrush}"/><TextBlock Text="Vault" VerticalAlignment="Center" Margin="10,0,0,0"/></StackPanel></Button>
+                        <Button Style="{StaticResource SidebarButton}" AutomationProperties.Name="Settings" Click="Settings_Click"><StackPanel Orientation="Horizontal"><iconPacks:PackIconFontAwesome Kind="GearSolid" Style="{StaticResource SidebarIcon}"/><TextBlock Text="Settings" VerticalAlignment="Center" Margin="10,0,0,0"/></StackPanel></Button>
+                        <Button Style="{StaticResource SidebarButton}" AutomationProperties.Name="Import or export" Click="Backup_Click"><StackPanel Orientation="Horizontal"><iconPacks:PackIconFontAwesome Kind="UpDownSolid" Style="{StaticResource SidebarIcon}"/><TextBlock Text="Import / Export" VerticalAlignment="Center" Margin="10,0,0,0"/></StackPanel></Button>
+                        <Button Style="{StaticResource SidebarButton}" AutomationProperties.Name="About" Click="About_Click"><StackPanel Orientation="Horizontal"><iconPacks:PackIconFontAwesome Kind="CircleInfoSolid" Style="{StaticResource SidebarIcon}"/><TextBlock Text="About" VerticalAlignment="Center" Margin="10,0,0,0"/></StackPanel></Button>
                     </StackPanel>
                     <StackPanel Grid.Row="2"><StackPanel Orientation="Horizontal"><Ellipse Width="7" Height="7" Style="{StaticResource ClientStatusDot}" Margin="0,0,7,0" VerticalAlignment="Center" AutomationProperties.Name="League Client connection indicator"/><TextBlock Text="LEAGUE CLIENT" Foreground="{StaticResource HighlightBrush}" FontSize="11" FontWeight="SemiBold"/></StackPanel><TextBlock Text="{Binding ClientStatus}" Style="{StaticResource MutedText}" FontSize="12" Margin="0,4,0,12" AutomationProperties.LiveSetting="Polite"/><Button Content="Lock vault" Click="Lock_Click"/></StackPanel>
                 </Grid>
@@ -97,7 +106,7 @@
                     <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="190"/><ColumnDefinition Width="150"/></Grid.ColumnDefinitions>
                         <StackPanel><TextBlock Text="SEARCH" Style="{StaticResource FilterLabel}"/><TextBox Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Search accounts" ToolTip="Search name, notes, region, rank, champion, skin, or role"/></StackPanel>
                         <StackPanel Grid.Column="1" Margin="12,0"><TextBlock Text="SORT BY" Style="{StaticResource FilterLabel}"/><ComboBox SelectedIndex="0" SelectionChanged="Sort_SelectionChanged"><ComboBoxItem Content="Name"/><ComboBoxItem Content="Recently played"/></ComboBox></StackPanel>
-                        <StackPanel Grid.Column="2"><TextBlock Text=" " Style="{StaticResource FilterLabel}"/><Button Style="{StaticResource PrimaryButton}" Content="＋ Add account" Click="AddAccount_Click"/></StackPanel>
+                        <StackPanel Grid.Column="2"><TextBlock Text=" " Style="{StaticResource FilterLabel}"/><Button Style="{StaticResource PrimaryButton}" Click="AddAccount_Click" AutomationProperties.Name="Add account"><StackPanel Orientation="Horizontal"><iconPacks:PackIconFontAwesome Kind="PlusSolid" Width="13" Height="13" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="{StaticResource ForegroundBrush}" Focusable="False" IsHitTestVisible="False"/><TextBlock Text="Add account" VerticalAlignment="Center" Foreground="{StaticResource ForegroundBrush}"/></StackPanel></Button></StackPanel>
                     </Grid>
                     <Grid Margin="0,12,0,0">
                         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>

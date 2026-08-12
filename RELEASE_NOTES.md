@@ -1,8 +1,8 @@
-# SummonersVault 0.1.1
+# SummonersVault 0.1.2
 
-Update-flow test release.
+Icon refinement release.
 
-- Validate application updates through GitHub Releases.
-- Upgrade GitHub Actions to current Node 24 versions.
-- Restore backup export and import in clean builds.
-- Ignore deleted release tags when starting release workflows.
+- Replace sidebar text symbols with consistent Font Awesome icons.
+- Use a shield icon for the vault and dedicated icons for settings, import and export, and About.
+- Replace the Add account text symbol with a properly aligned Font Awesome plus icon.
+- Add the Font Awesome and MahApps IconPacks licensing notices.

@@ -4,6 +4,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageVersion Include="MahApps.Metro.IconPacks.FontAwesome" Version="6.2.1" />
     <PackageVersion Include="Microsoft.Data.Sqlite.Core" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
     <PackageVersion Include="NSec.Cryptography" Version="26.4.0" />
