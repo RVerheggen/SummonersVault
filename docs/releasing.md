@@ -23,7 +23,7 @@ Complete these checks before making the repository public or pushing the first v
 4. The release workflow validates the version, runs tests, publishes a self-contained `win-x64` build, creates Velopack installer and portable assets, generates SHA-256 checksums and provenance attestations, and publishes the GitHub Release.
 5. Download the published installer and portable ZIP, verify their checksums and attestations, and perform a clean Windows 11 installation and update smoke test.
 
-No version tag should be pushed merely to test the workflow. Use local packages and a temporary file update source for update testing.
+Do not push a version tag merely to validate compilation or packaging. Use the local package verification commands below for those checks. The installed application currently reads updates only from the public GitHub Releases feed, so a complete check, download, install, and restart test requires two real releases. Follow [Testing updates](testing-updates.md) before creating either release.
 
 ## Local package verification
 
@@ -33,10 +33,12 @@ dotnet tool restore
 dotnet test SummonersVault.slnx -c Release
 dotnet publish src/SummonersVault.App/SummonersVault.App.csproj -c Release -r win-x64 --self-contained true -o artifacts/publish/win-x64
 dotnet tool install --tool-path artifacts/tools vpk --version 1.2.0
-artifacts/tools/vpk pack --packId SummonersVault.Desktop --packTitle SummonersVault --packVersion 0.1.0 --packDir artifacts/publish/win-x64 --mainExe SummonersVault.App.exe --runtime win-x64 --icon src/SummonersVault.App/Assets/AppIcon.ico --releaseNotes RELEASE_NOTES.md --outputDir artifacts/releases
+.\artifacts\tools\vpk.exe pack --packId SummonersVault.Desktop --packTitle SummonersVault --packVersion 0.1.0 --packDir artifacts\publish\win-x64 --mainExe SummonersVault.App.exe --runtime win-x64 --icon src\SummonersVault.App\Assets\AppIcon.ico --releaseNotes RELEASE_NOTES.md --outputDir artifacts\releases
 ```
 
 The installer writes application files beneath `%LOCALAPPDATA%\SummonersVault.Desktop`. The encrypted vault, settings, backups, and artwork cache remain beneath `%LOCALAPPDATA%\SummonersVault` and are not part of the application package.
+
+For the full update test, including the user prompt, download progress, vault locking, restart, and data preservation, see [Testing updates](testing-updates.md).
 
 ## Verify downloaded assets
 
