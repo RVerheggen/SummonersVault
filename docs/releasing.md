@@ -13,7 +13,7 @@ Complete these checks before making the repository public or pushing the first v
 5. Review native interop. `AllowUnsafeBlocks` is scoped to the WPF project because the source-generated `LibraryImport` in `DarkTitleBar.cs` requires it for the DWM title-bar call.
 6. Run the test suite, Release build, and self-contained publish.
 7. Enable GitHub secret scanning, push protection, private vulnerability reporting, Dependabot, immutable releases, branch protection, required CI, and maintainer two-factor authentication.
-8. Register LCU usage with Riot before public distribution.
+8. Confirm the public [Riot registration status](riot-registration.md) is accurate. SummonersVault is registered as a Production application and is currently Pending review.
 
 ## Create a release
 

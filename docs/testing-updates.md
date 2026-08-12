@@ -13,7 +13,7 @@ There are two different tests:
 - The release workflow refuses to publish while the repository is private.
 - The application ignores draft and prerelease releases because it uses the stable channel.
 - Every tag used for the end-to-end test creates a real public version. Do not use throwaway version numbers if immutable releases are enabled.
-- Complete Riot registration and the public-release checks in [Releasing SummonersVault](releasing.md) before publicly distributing a test build.
+- Confirm the documented [Riot registration status](riot-registration.md) is current and complete the public-release checks in [Releasing SummonersVault](releasing.md) before publicly distributing a test build.
 
 ## Part 1: Verify packaging locally
 
