@@ -1,15 +1,20 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Data.Sqlite;
 using SummonersVault.Core.Models;
-using SummonersVault.Core.Abstractions;
+using SummonersVault.Application.Abstractions;
+using SummonersVault.Application.Accounts;
+using SummonersVault.Application.Security;
+using SummonersVault.Application.Vault;
 using SummonersVault.Core.Services;
 using SummonersVault.Infrastructure.League;
 using SummonersVault.Infrastructure.Backup;
 using SummonersVault.Infrastructure.Artwork;
 using SummonersVault.Infrastructure.Security;
 using SummonersVault.Infrastructure.Storage;
+using SummonersVault.Infrastructure.Persistence;
 using Xunit;
+using System.Diagnostics;
 
 namespace SummonersVault.Tests;
 
@@ -25,36 +30,57 @@ public sealed class SecurityAndStorageTests
     [Fact]
     public void Envelope_RejectsWrongPassword_AndDetectsCorruption()
     {
-        var key = RandomNumberGenerator.GetBytes(32);
-        var metadata = VaultKeyEnvelope.Create(Guid.NewGuid(), "correct horse"u8, key);
+        byte[] key = RandomNumberGenerator.GetBytes(32);
+        VaultMetadata metadata = VaultKeyEnvelope.Create(Guid.NewGuid(), "correct horse"u8, key);
         Assert.False(VaultKeyEnvelope.TryUnwrap(metadata, "wrong password"u8, out _));
-        var corrupt = metadata with { KeyEnvelope = metadata.KeyEnvelope with { TagBase64 = Convert.ToBase64String(new byte[16]) } };
+        VaultMetadata corrupt = metadata with { KeyEnvelope = metadata.KeyEnvelope with { TagBase64 = Convert.ToBase64String(new byte[16]) } };
         Assert.False(VaultKeyEnvelope.TryUnwrap(corrupt, "correct horse"u8, out _));
-        Assert.True(VaultKeyEnvelope.TryUnwrap(metadata, "correct horse"u8, out var opened));
+        Assert.True(VaultKeyEnvelope.TryUnwrap(metadata, "correct horse"u8, out byte[]? opened));
         Assert.Equal(key, opened);
         CryptographicOperations.ZeroMemory(key); CryptographicOperations.ZeroMemory(opened);
     }
 
     [Fact]
+    public void SensitiveBuffer_ClearsOwnedBytesWhenDisposed()
+    {
+        byte[] bytes = "temporary-secret"u8.ToArray();
+        var buffer = new SensitiveBuffer(bytes);
+
+        buffer.Dispose();
+
+        Assert.All(bytes, value => Assert.Equal(0, value));
+        Assert.Throws<ObjectDisposedException>(() => buffer.Copy());
+    }
+
+    [Fact]
     public async Task Session_RewrapsDatabaseKey_WithoutChangingVaultData()
     {
-        var root = Path.Combine(Path.GetTempPath(), "SummonersVaultTests", Guid.NewGuid().ToString("N"));
+        string root = Path.Combine(Path.GetTempPath(), "SummonersVaultTests", Guid.NewGuid().ToString("N"));
         try
         {
-            var paths = new VaultPaths(root); var repository = new EncryptedSqliteVaultRepository(paths); await using var session = new VaultSession(paths, repository);
+            var paths = new VaultPaths(root); await using var repository = new EncryptedVaultStore(paths); await using var session = new VaultSession(paths, repository);
             await session.CreateAsync("old password"u8.ToArray());
-            await repository.SaveAccountAsync(new VaultAccount { LoginIdentifier = "rewrap-user", PasswordUtf8 = "kept-secret"u8.ToArray(), Region = "EUW1" });
+            using (var password = new SensitiveBuffer("kept-secret"u8.ToArray()))
+            {
+                await repository.SaveAccountAsync(new(new VaultAccount { Username = "rewrap-user", Region = "EUW1" }, password));
+            }
             await session.ChangeMasterPasswordAsync("old password"u8.ToArray(), "new password"u8.ToArray()); await session.LockAsync();
             Assert.False(await session.UnlockAsync("old password"u8.ToArray())); Assert.True(await session.UnlockAsync("new password"u8.ToArray()));
-            Assert.Equal("rewrap-user", Assert.Single(await repository.GetAccountsAsync()).LoginIdentifier);
+            Assert.Equal("rewrap-user", Assert.Single(await repository.GetAccountsAsync()).Username);
         }
-        finally { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
     }
 
     [Fact]
     public void Search_MatchesOwnedContentFacets_AndUsesSoloRank()
     {
-        var account = new VaultAccount { LoginIdentifier = "learn-top", Label = "Top practice", Region = "EUW1", Roles = AccountRole.Top, Notes = "weakside" };
+        var account = new VaultAccount { Username = "learn-top", Label = "Top practice", Region = "EUW1", Roles = AccountRole.Top, Notes = "weakside" };
         account.Ranks.Add(new("RANKED_FLEX_SR", "SILVER", "I", 50, 1, 1)); account.Ranks.Add(new("RANKED_SOLO_5x5", "GOLD", "IV", 20, 2, 1));
         account.Champions.Add(new(103, "Ahri")); account.Skins.Add(new(103000, 103, "Classic Ahri")); account.Skins.Add(new(103001, 103, "Dynasty Ahri"));
         Assert.Equal("GOLD", account.CardRank?.Tier);
@@ -84,7 +110,7 @@ public sealed class SecurityAndStorageTests
     [Fact]
     public void LeagueIdentityRules_AllowFirstLinkAndRejectADifferentLinkedProfile()
     {
-        var account = new VaultAccount { LoginIdentifier = "player", Region = "EUW1" };
+        var account = new VaultAccount { Username = "player", Region = "EUW1" };
         Assert.True(LeagueIdentityRules.MatchesLinkedAccount(account, "signed-in-puuid"));
 
         account.Puuid = "linked-puuid";
@@ -104,12 +130,12 @@ public sealed class SecurityAndStorageTests
     [Fact]
     public void OwnedSkinRules_NormalizeCanonicalizesAlternateNamespaceAndDeduplicates()
     {
-        var normalized = OwnedSkinRules.Normalize([
+        IReadOnlyList<OwnedSkin> normalized = OwnedSkinRules.Normalize([
             new(19016, 19, "PROJECT: Warwick"),
             new(60019016, 60019, "PROJECT: Warwick")
         ]);
 
-        var skin = Assert.Single(normalized);
+        OwnedSkin skin = Assert.Single(normalized);
         Assert.Equal(19016, skin.SkinId);
         Assert.Equal(19, skin.ChampionId);
         Assert.Equal("PROJECT: Warwick", skin.Name);
@@ -132,14 +158,14 @@ public sealed class SecurityAndStorageTests
     [Fact]
     public void LeagueInstallationDiscovery_MapsRiotAndLeagueFoldersAndLaunchArguments()
     {
-        var riotGames = Path.Combine(Path.GetTempPath(), "Riot Games");
-        var leagueDirectory = Path.Combine(riotGames, "League of Legends");
-        var riotClientExecutable = Path.Combine(riotGames, "Riot Client", "RiotClientServices.exe");
+        string riotGames = Path.Combine(Path.GetTempPath(), "Riot Games");
+        string leagueDirectory = Path.Combine(riotGames, "League of Legends");
+        string riotClientExecutable = Path.Combine(riotGames, "Riot Client", "RiotClientServices.exe");
 
         Assert.Contains(leagueDirectory, LeagueInstallationLocator.GetLeagueDirectories(riotClientExecutable, riotGames), StringComparer.OrdinalIgnoreCase);
         Assert.Contains(riotClientExecutable, LeagueInstallationLocator.GetRiotClientExecutables(leagueDirectory, riotGames), StringComparer.OrdinalIgnoreCase);
 
-        var startInfo = LeagueInstallationLocator.CreateLaunchStartInfo(riotClientExecutable);
+        ProcessStartInfo startInfo = LeagueInstallationLocator.CreateLaunchStartInfo(riotClientExecutable);
         Assert.Equal(riotClientExecutable, startInfo.FileName);
         Assert.Equal(["--launch-product=league_of_legends", "--launch-patchline=live"], startInfo.ArgumentList);
         Assert.True(Path.IsPathRooted(LeagueInstallationLocator.DefaultRiotGamesDirectory));
@@ -148,9 +174,9 @@ public sealed class SecurityAndStorageTests
     [Fact]
     public void LeagueInstallationDiscovery_UsesLeagueClientUxAndLimitsCertificateBypassToHttpsLoopback()
     {
-        var riotGames = Path.Combine(Path.GetTempPath(), "Riot Games");
-        var discoveredDirectory = Path.Combine(Path.GetTempPath(), "Custom League");
-        var clientUx = Path.Combine(discoveredDirectory, "LeagueClientUx.exe");
+        string riotGames = Path.Combine(Path.GetTempPath(), "Riot Games");
+        string discoveredDirectory = Path.Combine(Path.GetTempPath(), "Custom League");
+        string clientUx = Path.Combine(discoveredDirectory, "LeagueClientUx.exe");
 
         Assert.Contains(discoveredDirectory, LeagueInstallationLocator.GetLeagueDirectories(null, riotGames, [clientUx]), StringComparer.OrdinalIgnoreCase);
         Assert.True(LeagueClientGateway.IsLeagueLoopbackRequest(new Uri("https://127.0.0.1:12345/")));
@@ -179,7 +205,7 @@ public sealed class SecurityAndStorageTests
     public void WalletParser_MapsLegacyIpFieldToBlueEssence(string json, long? expectedRp, long? expectedBlueEssence)
     {
         using var document = System.Text.Json.JsonDocument.Parse(json);
-        var wallet = LeagueClientGateway.ParseWallet(document.RootElement);
+        LeagueWalletSnapshot? wallet = LeagueClientGateway.ParseWallet(document.RootElement);
         Assert.Equal(expectedRp, wallet?.RiotPoints);
         Assert.Equal(expectedBlueEssence, wallet?.BlueEssence);
     }
@@ -201,20 +227,31 @@ public sealed class SecurityAndStorageTests
     [Fact]
     public void LeagueSnapshot_RequiresBothInventoryCategoriesToBeComplete()
     {
-        var snapshot = Snapshot(MatchSnapshotResult.Failed);
+        LeagueSnapshot snapshot = Snapshot(MatchSnapshotResult.Failed);
         Assert.False(snapshot.HasCompleteInventory);
         Assert.False(snapshot.HasCompleteSyncData);
         var completeInventory = new LeagueSnapshot
         {
-            Puuid = "puuid", RiotGameName = "Player", RiotTagLine = "EUW", Region = "EUW1",
-            Champions = [], Skins = []
+            Puuid = "puuid",
+            RiotGameName = "Player",
+            RiotTagLine = "EUW",
+            Region = "EUW1",
+            Champions = [],
+            Skins = []
         };
         Assert.True(completeInventory.HasCompleteInventory);
         Assert.False(completeInventory.HasCompleteSyncData);
         Assert.True(new LeagueSnapshot
         {
-            Puuid = "puuid", RiotGameName = "Player", RiotTagLine = "EUW", Region = "EUW1",
-            Champions = [], Skins = [], Ranks = [], CraftingLoot = [], Wallet = new(0, 0)
+            Puuid = "puuid",
+            RiotGameName = "Player",
+            RiotTagLine = "EUW",
+            Region = "EUW1",
+            Champions = [],
+            Skins = [],
+            Ranks = [],
+            CraftingLoot = [],
+            Wallet = new(0, 0)
         }.HasCompleteSyncData);
     }
 
@@ -222,7 +259,7 @@ public sealed class SecurityAndStorageTests
     public void LootParser_ExcludesZeroCounts_AndPreservesGenericMetadata()
     {
         using var document = System.Text.Json.JsonDocument.Parse("""[{"lootId":"CHAMPION_RENTAL_1","lootName":"Champion shard","type":"CHAMPION_RENTAL","displayCategories":"Champion shards","localizedName":"Annie champion shard","count":2,"rarity":"Epic","refId":"1","tilePath":"/lol-game-data/assets/v1/champion-tiles/1/1000.jpg","disenchantValue":90,"upgradeEssenceValue":450},{"lootId":"empty","count":0}]""");
-        var loot = Assert.Single(LeagueClientGateway.ParseCraftingLoot(document.RootElement));
+        CraftingLootItem loot = Assert.Single(LeagueClientGateway.ParseCraftingLoot(document.RootElement));
         Assert.Equal("Annie champion shard", loot.LocalizedName);
         Assert.Equal(2, loot.Count);
         Assert.Equal(90, loot.DisenchantValue);
@@ -233,7 +270,7 @@ public sealed class SecurityAndStorageTests
     public void LootParser_NormalizesLcuCategories_AndBlankNames()
     {
         using var document = System.Text.Json.JsonDocument.Parse("""[{"lootId":"skin-1","lootName":"PROJECT_WARWICK","type":"SKIN","displayCategories":"SKIN","localizedName":"","count":1,"refId":700161}]""");
-        var loot = Assert.Single(LeagueClientGateway.ParseCraftingLoot(document.RootElement));
+        CraftingLootItem loot = Assert.Single(LeagueClientGateway.ParseCraftingLoot(document.RootElement));
         Assert.Equal("Skin shards", loot.DisplayCategory);
         Assert.Equal("PROJECT_WARWICK", loot.LocalizedName);
         Assert.Equal("700161", loot.ReferenceId);
@@ -254,23 +291,32 @@ public sealed class SecurityAndStorageTests
     [InlineData("https://example.com/image.png", false)]
     public void ArtworkMapping_AllowsOnlyDocumentedPublicPaths(string path, bool expected)
     {
-        Assert.Equal(expected, ArtworkCacheService.TryMapCommunityDragon(path, out var uri));
-        if (expected) Assert.Equal("raw.communitydragon.org", uri.Host);
+        Assert.Equal(expected, ArtworkCacheService.TryMapCommunityDragon(path, out Uri? uri));
+        if (expected)
+        {
+            Assert.Equal("raw.communitydragon.org", uri.Host);
+        }
     }
 
     [Fact]
     public async Task SchemaV4_PreservesRichSnapshots_AndMarksFailedCategoriesStale()
     {
-        var root = Path.Combine(Path.GetTempPath(), "SummonersVaultTests", Guid.NewGuid().ToString("N"));
+        string root = Path.Combine(Path.GetTempPath(), "SummonersVaultTests", Guid.NewGuid().ToString("N"));
         try
         {
-            var paths = new VaultPaths(root); await using var repository = new EncryptedSqliteVaultRepository(paths);
+            var paths = new VaultPaths(root); await using var repository = new EncryptedVaultStore(paths);
             await repository.OpenAsync(RandomNumberGenerator.GetBytes(32), create: true);
-            var account = new VaultAccount { LoginIdentifier = "rich", PasswordUtf8 = "secret"u8.ToArray(), Region = "EUW" };
-            await repository.SaveAccountAsync(account);
+            var account = new VaultAccount { Username = "rich", Region = "EUW" };
+            using (var password = new SensitiveBuffer("secret"u8.ToArray()))
+            {
+                await repository.SaveAccountAsync(new(account, password));
+            }
             await repository.ApplyLeagueSnapshotAsync(account.Id, new LeagueSnapshot
             {
-                Puuid = "rich-puuid", RiotGameName = "Player", RiotTagLine = "EUW", Region = "EUW1",
+                Puuid = "rich-puuid",
+                RiotGameName = "Player",
+                RiotTagLine = "EUW",
+                Region = "EUW1",
                 Ranks = [new("RANKED_SOLO_5x5", "GOLD", "II", 44, 20, 10, true, 2)],
                 Champions = [new(1, "Annie", "/lol-game-data/assets/a.jpg", "/lol-game-data/assets/b.jpg")],
                 Skins = [new(1001, 1, "Goth Annie", "/lol-game-data/assets/c.jpg", "/lol-game-data/assets/d.jpg")],
@@ -278,19 +324,25 @@ public sealed class SecurityAndStorageTests
                 Wallet = new(100, 200)
             });
             await repository.ApplyLeagueSnapshotAsync(account.Id, Snapshot(MatchSnapshotResult.Failed));
-            var loaded = await repository.GetAccountAsync(account.Id);
+            VaultAccount? loaded = await repository.GetAccountAsync(account.Id);
             Assert.Equal("/lol-game-data/assets/a.jpg", Assert.Single(loaded!.Champions).BaseSplashAssetPath);
             Assert.True(Assert.Single(loaded.Ranks).IsProvisional);
             Assert.Equal(3, Assert.Single(loaded.LootItems).Count);
             Assert.All(loaded.SyncCategories, state => Assert.Equal(SnapshotState.Stale, state.State));
         }
-        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
     }
 
     [Fact]
     public async Task LeagueLockfileReader_AllowsTheClientToKeepItsWriteHandleOpen()
     {
-        var path = Path.GetTempFileName();
+        string path = Path.GetTempFileName();
         try
         {
             await File.WriteAllTextAsync(path, "LeagueClient:1234:2999:secret:https");
@@ -308,26 +360,33 @@ public sealed class SecurityAndStorageTests
     [InlineData("{\"games\":[{\"gameCreation\":\"bad\"}]}", false, null)]
     public void MatchHistoryParser_HandlesNumericTextEmptyAndMalformed(string json, bool hasMatch, int? matchId)
     {
-        var result = LeagueMatchHistoryParser.Parse(json);
+        MatchSnapshotResult result = LeagueMatchHistoryParser.Parse(json);
         Assert.Equal(hasMatch, result.HasMatch); Assert.Equal((long?)matchId, result.MatchId);
-        if (json.Contains("[]", StringComparison.Ordinal)) Assert.True(result.Succeeded);
+        if (json.Contains("[]", StringComparison.Ordinal))
+        {
+            Assert.True(result.Succeeded);
+        }
     }
 
     [Fact]
     public async Task EncryptedRepository_HidesSecrets_AndPreservesMonotonicMatchHistory()
     {
-        var root = Path.Combine(Path.GetTempPath(), "SummonersVaultTests", Guid.NewGuid().ToString("N"));
+        string root = Path.Combine(Path.GetTempPath(), "SummonersVaultTests", Guid.NewGuid().ToString("N"));
         try
         {
-            var paths = new VaultPaths(root); var key = RandomNumberGenerator.GetBytes(32);
-            await using var repository = new EncryptedSqliteVaultRepository(paths);
+            var paths = new VaultPaths(root); byte[] key = RandomNumberGenerator.GetBytes(32);
+            await using var repository = new EncryptedVaultStore(paths);
             await repository.OpenAsync(key, create: true);
-            var account = new VaultAccount { LoginIdentifier = "plaintext-login-marker", PasswordUtf8 = Encoding.UTF8.GetBytes("plaintext-password-marker"), Region = "EUW1", Roles = AccountRole.Mid | AccountRole.Support };
-            account.Champions.Add(new(1, "Annie")); account.Skins.Add(new(1000, 1, "Annie")); account.Skins.Add(new(1001, 1, "Goth Annie")); await repository.SaveAccountAsync(account);
+            var account = new VaultAccount { Username = "plaintext-login-marker", Region = "EUW1", Roles = AccountRole.Mid | AccountRole.Support };
+            account.Champions.Add(new(1, "Annie")); account.Skins.Add(new(1000, 1, "Annie")); account.Skins.Add(new(1001, 1, "Goth Annie"));
+            using (var password = new SensitiveBuffer(Encoding.UTF8.GetBytes("plaintext-password-marker")))
+            {
+                await repository.SaveAccountAsync(new(account, password));
+            }
             var newest = new DateTimeOffset(2026, 8, 5, 22, 30, 0, TimeSpan.Zero);
             await repository.ApplyLeagueSnapshotAsync(account.Id, Snapshot(MatchSnapshotResult.Known(newest, 42), new(975, 123456)));
             await repository.ApplyLeagueSnapshotAsync(account.Id, Snapshot(MatchSnapshotResult.Known(newest.AddDays(-1), 41)));
-            var loaded = await repository.GetAccountAsync(account.Id);
+            VaultAccount? loaded = await repository.GetAccountAsync(account.Id);
             Assert.Equal(newest, loaded?.LastMatchPlayedAtUtc); Assert.Equal(42, loaded?.LastMatchId);
             await repository.ApplyLeagueSnapshotAsync(account.Id, Snapshot(MatchSnapshotResult.Failed));
             loaded = await repository.GetAccountAsync(account.Id);
@@ -335,32 +394,77 @@ public sealed class SecurityAndStorageTests
             Assert.Equal("Goth Annie", Assert.Single(loaded!.Skins).Name);
             Assert.Equal(975, loaded.RiotPoints); Assert.Equal(123456, loaded.BlueEssence);
             await repository.CloseAsync();
-            var bytes = await File.ReadAllBytesAsync(paths.DatabasePath); var text = Encoding.UTF8.GetString(bytes);
+            byte[] bytes = await File.ReadAllBytesAsync(paths.DatabasePath); string text = Encoding.UTF8.GetString(bytes);
             Assert.DoesNotContain("plaintext-login-marker", text, StringComparison.Ordinal); Assert.DoesNotContain("plaintext-password-marker", text, StringComparison.Ordinal);
-            await Assert.ThrowsAnyAsync<Exception>(async () => { await using var wrong = new EncryptedSqliteVaultRepository(paths); await wrong.OpenAsync(RandomNumberGenerator.GetBytes(32), create: false); });
+            await Assert.ThrowsAnyAsync<Exception>(async () => { await using var wrong = new EncryptedVaultStore(paths); await wrong.OpenAsync(RandomNumberGenerator.GetBytes(32), create: false); });
             CryptographicOperations.ZeroMemory(key);
         }
-        finally { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
     }
 
     [Fact]
-    public async Task EncryptedRepository_MigratesWalletColumnsForAnExistingVault()
+    public async Task EncryptedRepository_ReplacesCollectionsAndRetainsPasswordWhenEditing()
     {
-        var root = Path.Combine(Path.GetTempPath(), "SummonersVaultTests", Guid.NewGuid().ToString("N"));
-        var paths = new VaultPaths(root);
-        var key = RandomNumberGenerator.GetBytes(32);
-        var legacyAccountId = Guid.NewGuid();
+        string root = Path.Combine(Path.GetTempPath(), "SummonersVaultTests", Guid.NewGuid().ToString("N"));
+        byte[] key = RandomNumberGenerator.GetBytes(32);
         try
         {
-            await using (var initial = new EncryptedSqliteVaultRepository(paths))
+            var paths = new VaultPaths(root);
+            await using var repository = new EncryptedVaultStore(paths);
+            await repository.OpenAsync(key, create: true);
+            var account = new VaultAccount { Username = "edit-user", Region = "EUW" };
+            account.Champions.Add(new(1, "Annie"));
+            using (var password = new SensitiveBuffer("retained-secret"u8.ToArray()))
+            {
+                await repository.SaveAccountAsync(new(account, password));
+            }
+
+            account.Champions.Clear();
+            account.Champions.Add(new(2, "Olaf"));
+            await repository.SaveAccountAsync(new(account, null));
+
+            VaultAccount loaded = Assert.Single(await repository.GetAccountsAsync());
+            Assert.Equal("Olaf", Assert.Single(loaded.Champions).Name);
+            using SensitiveBuffer? retainedPassword = await repository.GetPasswordAsync(account.Id);
+            Assert.NotNull(retainedPassword);
+            Assert.Equal("retained-secret", Encoding.UTF8.GetString(retainedPassword.Memory.Span));
+
+            await repository.DeleteAccountAsync(account.Id);
+            Assert.Empty(await repository.GetAccountsAsync());
+            Assert.Null(await repository.GetPasswordAsync(account.Id));
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(key);
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task EncryptedRepository_RejectsUnsupportedPreReleaseSchemaWithoutModifyingIt()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "SummonersVaultTests", Guid.NewGuid().ToString("N"));
+        var paths = new VaultPaths(root);
+        byte[] key = RandomNumberGenerator.GetBytes(32);
+        try
+        {
+            await using (var initial = new EncryptedVaultStore(paths))
             {
                 await initial.OpenAsync(key, create: true);
-                await initial.SaveAccountAsync(new VaultAccount { Id = legacyAccountId, LoginIdentifier = "legacy-region", Region = "EUW" });
                 await initial.CloseAsync();
             }
 
-            var normalizedPath = Path.GetFullPath(paths.DatabasePath).Replace('\\', '/');
-            var connectionString = new SqliteConnectionStringBuilder
+            string normalizedPath = Path.GetFullPath(paths.DatabasePath).Replace('\\', '/');
+            string connectionString = new SqliteConnectionStringBuilder
             {
                 DataSource = $"file:{normalizedPath}?cipher=sqlcipher&legacy=4",
                 Password = $"x'{Convert.ToHexString(key)}'",
@@ -369,52 +473,138 @@ public sealed class SecurityAndStorageTests
             await using (var connection = new SqliteConnection(connectionString))
             {
                 await connection.OpenAsync();
-                await using var command = connection.CreateCommand();
-                command.CommandText = "ALTER TABLE accounts DROP COLUMN riot_points; ALTER TABLE accounts DROP COLUMN blue_essence; UPDATE accounts SET region='EUW1' WHERE id=$id; UPDATE schema_info SET version=1;";
-                command.Parameters.AddWithValue("$id", legacyAccountId.ToString("D"));
+                await using SqliteCommand command = connection.CreateCommand();
+                command.CommandText = "DROP TABLE \"__EFMigrationsHistory\"; CREATE TABLE schema_info(version INTEGER NOT NULL); INSERT INTO schema_info(version) VALUES(3);";
                 await command.ExecuteNonQueryAsync();
             }
 
-            await using var migrated = new EncryptedSqliteVaultRepository(paths);
-            await migrated.OpenAsync(key, create: false);
-            var account = new VaultAccount { LoginIdentifier = "migrated", PasswordUtf8 = "local-secret"u8.ToArray(), Region = "EUW1", RiotPoints = 125, BlueEssence = 9000 };
-            await migrated.SaveAccountAsync(account);
-            var loaded = await migrated.GetAccountAsync(account.Id);
-            Assert.Equal(125, loaded?.RiotPoints);
-            Assert.Equal(9000, loaded?.BlueEssence);
-            Assert.Equal("EUW", (await migrated.GetAccountAsync(legacyAccountId))?.Region);
+            await using var unsupported = new EncryptedVaultStore(paths);
+            UnsupportedVaultException exception = await Assert.ThrowsAsync<UnsupportedVaultException>(() => unsupported.OpenAsync(key, create: false));
+            Assert.Contains("version 3", exception.Message, StringComparison.Ordinal);
+
+            await using var verification = new SqliteConnection(connectionString);
+            await verification.OpenAsync();
+            await using SqliteCommand verificationCommand = verification.CreateCommand();
+            verificationCommand.CommandText = "SELECT version FROM schema_info";
+            Assert.Equal(3L, await verificationCommand.ExecuteScalarAsync());
         }
         finally
         {
             CryptographicOperations.ZeroMemory(key);
-            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task EncryptedRepository_AdoptsPublicSchemaV4AndPreservesData()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "SummonersVaultTests", Guid.NewGuid().ToString("N"));
+        var paths = new VaultPaths(root);
+        byte[] key = RandomNumberGenerator.GetBytes(32);
+        var account = new VaultAccount { Username = "public-v4-user", Region = "EUW", RiotPoints = 42, BlueEssence = 1234 };
+        account.Champions.Add(new(1, "Annie"));
+
+        try
+        {
+            await using (var initial = new EncryptedVaultStore(paths))
+            {
+                await initial.OpenAsync(key, create: true);
+                using var initialPassword = new SensitiveBuffer("public-secret"u8.ToArray());
+                await initial.SaveAccountAsync(new(account, initialPassword));
+                await initial.CloseAsync();
+            }
+
+            string normalizedPath = Path.GetFullPath(paths.DatabasePath).Replace('\\', '/');
+            string connectionString = new SqliteConnectionStringBuilder
+            {
+                DataSource = $"file:{normalizedPath}?cipher=sqlcipher&legacy=4",
+                Password = $"x'{Convert.ToHexString(key)}'",
+                Pooling = false
+            }.ToString();
+            await using (var connection = new SqliteConnection(connectionString))
+            {
+                await connection.OpenAsync();
+                await using SqliteCommand command = connection.CreateCommand();
+                command.CommandText = "DROP TABLE \"__EFMigrationsHistory\"; CREATE TABLE schema_info(version INTEGER NOT NULL); INSERT INTO schema_info(version) VALUES(4);";
+                await command.ExecuteNonQueryAsync();
+            }
+
+            await using var adopted = new EncryptedVaultStore(paths);
+            await adopted.OpenAsync(key, create: false);
+            VaultAccount loaded = Assert.Single(await adopted.GetAccountsAsync());
+            Assert.Equal("public-v4-user", loaded.Username);
+            Assert.Equal(42, loaded.RiotPoints);
+            Assert.Equal("Annie", Assert.Single(loaded.Champions).Name);
+
+            using SensitiveBuffer? password = await adopted.GetPasswordAsync(loaded.Id);
+            Assert.NotNull(password);
+            Assert.Equal("public-secret", Encoding.UTF8.GetString(password.Memory.Span));
+            await adopted.CloseAsync();
+
+            await using var verification = new SqliteConnection(connectionString);
+            await verification.OpenAsync();
+            await using SqliteCommand verificationCommand = verification.CreateCommand();
+            verificationCommand.CommandText = "SELECT COUNT(*) FROM \"__EFMigrationsHistory\" WHERE \"MigrationId\"=$migration; SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='schema_info';";
+            verificationCommand.Parameters.AddWithValue("$migration", EncryptedVaultStore.BaselineMigrationId);
+            await using SqliteDataReader reader = await verificationCommand.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            Assert.Equal(1L, reader.GetInt64(0));
+            Assert.True(await reader.NextResultAsync());
+            Assert.True(await reader.ReadAsync());
+            Assert.Equal(0L, reader.GetInt64(0));
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(key);
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
         }
     }
 
     [Fact]
     public async Task Backup_ImportsAcrossDifferentMasterPasswords_AndPreservesMatchMetadata()
     {
-        var root = Path.Combine(Path.GetTempPath(), "SummonersVaultTests", Guid.NewGuid().ToString("N"));
-        var sourceRoot = Path.Combine(root, "source"); var targetRoot = Path.Combine(root, "target"); var archive = Path.Combine(root, "portable.svault");
+        string root = Path.Combine(Path.GetTempPath(), "SummonersVaultTests", Guid.NewGuid().ToString("N"));
+        string sourceRoot = Path.Combine(root, "source"); string targetRoot = Path.Combine(root, "target"); string archive = Path.Combine(root, "portable.svault");
         Directory.CreateDirectory(root);
         try
         {
-            var sourcePaths = new VaultPaths(sourceRoot); var sourceRepository = new EncryptedSqliteVaultRepository(sourcePaths); await using var sourceSession = new VaultSession(sourcePaths, sourceRepository);
+            var sourcePaths = new VaultPaths(sourceRoot); await using var sourceRepository = new EncryptedVaultStore(sourcePaths); await using var sourceSession = new VaultSession(sourcePaths, sourceRepository);
             await sourceSession.CreateAsync("source password"u8.ToArray());
-            var account = new VaultAccount { LoginIdentifier = "backup-user", PasswordUtf8 = "backup-secret"u8.ToArray(), Region = "NA1", LastMatchPlayedAtUtc = new(2026, 8, 4, 12, 0, 0, TimeSpan.Zero), LastMatchId = 999, MatchHistoryState = MatchHistoryState.Stale, RiotPoints = 500, BlueEssence = 25000 };
-            await sourceRepository.SaveAccountAsync(account);
-            await new VaultBackupService(sourcePaths, sourceSession).ExportAsync(archive);
+            var account = new VaultAccount { Username = "backup-user", Region = "NA1", LastMatchPlayedAtUtc = new(2026, 8, 4, 12, 0, 0, TimeSpan.Zero), LastMatchId = 999, MatchHistoryState = MatchHistoryState.Stale, RiotPoints = 500, BlueEssence = 25000 };
+            using (var password = new SensitiveBuffer("backup-secret"u8.ToArray()))
+            {
+                await sourceRepository.SaveAccountAsync(new(account, password));
+            }
+            await new VaultBackupService(sourcePaths, sourceSession, sourceSession, sourceRepository).ExportAsync(archive);
 
-            var targetPaths = new VaultPaths(targetRoot); var targetRepository = new EncryptedSqliteVaultRepository(targetPaths); await using var targetSession = new VaultSession(targetPaths, targetRepository);
+            var targetPaths = new VaultPaths(targetRoot); await using var targetRepository = new EncryptedVaultStore(targetPaths); await using var targetSession = new VaultSession(targetPaths, targetRepository);
             await targetSession.CreateAsync("target password"u8.ToArray());
-            var targetBackup = new VaultBackupService(targetPaths, targetSession);
-            await using (var preview = await targetBackup.PreviewImportAsync(archive, "source password"u8.ToArray())) await targetBackup.ImportAsync(preview, new Dictionary<Guid, BackupConflictChoice>());
-            var imported = Assert.Single(await targetRepository.GetAccountsAsync());
+            var targetBackup = new VaultBackupService(targetPaths, targetSession, targetSession, targetRepository);
+            await using (BackupImportPreview preview = await targetBackup.PreviewImportAsync(archive, "source password"u8.ToArray()))
+            {
+                await targetBackup.ImportAsync(preview, new Dictionary<Guid, BackupConflictChoice>());
+            }
+
+            VaultAccount imported = Assert.Single(await targetRepository.GetAccountsAsync());
             Assert.Equal(account.LastMatchPlayedAtUtc, imported.LastMatchPlayedAtUtc); Assert.Equal(999, imported.LastMatchId); Assert.Equal(MatchHistoryState.Stale, imported.MatchHistoryState);
             Assert.Equal(500, imported.RiotPoints); Assert.Equal(25000, imported.BlueEssence);
-            var withPassword = await targetRepository.GetAccountAsync(imported.Id, includePassword: true); Assert.Equal("backup-secret", Encoding.UTF8.GetString(withPassword!.PasswordUtf8));
+            using SensitiveBuffer? importedPassword = await targetRepository.GetPasswordAsync(imported.Id);
+            Assert.NotNull(importedPassword);
+            Assert.Equal("backup-secret", Encoding.UTF8.GetString(importedPassword.Memory.Span));
         }
-        finally { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
     }
 
     private static LeagueSnapshot Snapshot(MatchSnapshotResult match, LeagueWalletSnapshot? wallet = null) => new() { Puuid = "puuid", RiotGameName = "Player", RiotTagLine = "EUW", Region = "EUW1", Match = match, Wallet = wallet };

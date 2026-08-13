@@ -1,4 +1,4 @@
-namespace SummonersVault.Core.Models;
+﻿namespace SummonersVault.Core.Models;
 
 public static class OwnedSkinRules
 {
@@ -10,21 +10,22 @@ public static class OwnedSkinRules
         if (skin.ChampionId is >= AlternateChampionIdOffset and < 70_000
             && skin.SkinId >= AlternateSkinIdOffset)
         {
-            var championId = skin.ChampionId - AlternateChampionIdOffset;
-            var skinId = skin.SkinId - AlternateSkinIdOffset;
+            int championId = skin.ChampionId - AlternateChampionIdOffset;
+            int skinId = skin.SkinId - AlternateSkinIdOffset;
             if (championId > 0 && skinId > 0 && skinId / 1000 == championId)
+            {
                 return skin with { SkinId = skinId, ChampionId = championId };
+            }
         }
 
         return skin;
     }
 
-    public static IReadOnlyList<OwnedSkin> Normalize(IEnumerable<OwnedSkin> skins) => skins
+    public static IReadOnlyList<OwnedSkin> Normalize(IEnumerable<OwnedSkin> skins) => [.. skins
         .Select(Canonicalize)
         .Where(IsCountedCanonical)
         .GroupBy(skin => skin.SkinId)
-        .Select(group => group.First())
-        .ToArray();
+        .Select(group => group.First())];
 
     public static bool IsCounted(OwnedSkin skin)
     {
@@ -33,10 +34,17 @@ public static class OwnedSkinRules
 
     private static bool IsCountedCanonical(OwnedSkin skin)
     {
-        if (skin.SkinId <= 0 || skin.ChampionId <= 0) return false;
-        if (skin.SkinId == skin.ChampionId * 1000) return false;
+        if (skin.SkinId <= 0 || skin.ChampionId <= 0)
+        {
+            return false;
+        }
 
-        var name = skin.Name.Trim();
+        if (skin.SkinId == skin.ChampionId * 1000)
+        {
+            return false;
+        }
+
+        string name = skin.Name.Trim();
         return !IsBaseName(name, "Classic")
             && !IsBaseName(name, "Original")
             && !IsBaseName(name, "Default");

@@ -23,8 +23,17 @@ jobs:
       - name: Restore
         run: dotnet restore SummonersVault.slnx
 
+      - name: Restore pinned tools
+        run: dotnet tool restore
+
+      - name: Verify formatting and code style
+        run: dotnet format SummonersVault.slnx --no-restore --verify-no-changes
+
       - name: Build
         run: dotnet build SummonersVault.slnx -c Release --no-restore
+
+      - name: Verify EF Core model matches migrations
+        run: dotnet ef migrations has-pending-model-changes --project src/SummonersVault.Infrastructure/SummonersVault.Infrastructure.csproj --context VaultDbContext --configuration Release --no-build
 
       - name: Test
         run: dotnet test SummonersVault.slnx -c Release --no-build

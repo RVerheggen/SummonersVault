@@ -4,6 +4,11 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\SummonersVault.Core\SummonersVault.Core.csproj" />
+    <ProjectReference Include="..\SummonersVault.Application\SummonersVault.Application.csproj" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite.Core" />
     <PackageReference Include="Microsoft.Data.Sqlite.Core" />
     <PackageReference Include="NSec.Cryptography" />
     <PackageReference Include="SQLite3MC.PCLRaw.bundle" />

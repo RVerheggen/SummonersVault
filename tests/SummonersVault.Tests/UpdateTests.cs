@@ -1,5 +1,6 @@
-using SummonersVault.App.Services;
+﻿using SummonersVault.App.Services;
 using SummonersVault.Infrastructure.Settings;
+using SummonersVault.Application.Settings;
 using SummonersVault.Infrastructure.Storage;
 using Xunit;
 
@@ -18,14 +19,14 @@ public sealed class UpdateTests
     [Fact]
     public async Task OlderSettingsJsonLoadsNewUpdateDefaults()
     {
-        var root = Path.Combine(Path.GetTempPath(), $"sv-update-settings-{Guid.NewGuid():N}");
+        string root = Path.Combine(Path.GetTempPath(), $"sv-update-settings-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
         try
         {
             var paths = new VaultPaths(root);
             await File.WriteAllTextAsync(paths.SettingsPath, "{\"AutoLockMinutes\":30,\"LockOnSessionLockOrSleep\":true}");
 
-            var settings = await new AppSettingsStore(paths).LoadAsync();
+            AppSettings settings = await new AppSettingsStore(paths).LoadAsync();
 
             Assert.Equal(30, settings.AutoLockMinutes);
             Assert.True(settings.AutomaticallyCheckForUpdates);
@@ -63,9 +64,9 @@ public sealed class UpdateTests
         };
         var workflow = new UpdateWorkflow(service);
         var settings = new AppSettings { AutomaticallyCheckForUpdates = false };
-        var saves = 0;
+        int saves = 0;
 
-        var result = await workflow.CheckAsync(settings, manual: true, now, _ => { saves++; return Task.CompletedTask; });
+        UpdateCheckResult result = await workflow.CheckAsync(settings, manual: true, now, _ => { saves++; return Task.CompletedTask; });
 
         Assert.Equal(UpdateCheckState.UpToDate, result.State);
         Assert.Equal(now, settings.LastUpdateCheckAtUtc);
@@ -85,7 +86,7 @@ public sealed class UpdateTests
         var workflow = new UpdateWorkflow(service);
         var settings = new AppSettings { LastUpdateCheckAtUtc = previous };
 
-        var result = await workflow.CheckAsync(settings, manual: true, previous.AddDays(2), _ => throw new InvalidOperationException("Should not save"));
+        UpdateCheckResult result = await workflow.CheckAsync(settings, manual: true, previous.AddDays(2), _ => throw new InvalidOperationException("Should not save"));
 
         Assert.Equal(UpdateCheckState.Failed, result.State);
         Assert.Equal(previous, settings.LastUpdateCheckAtUtc);
@@ -99,7 +100,7 @@ public sealed class UpdateTests
         var workflow = new UpdateWorkflow(service);
         var settings = new AppSettings { LastUpdateCheckAtUtc = now.AddMinutes(-10) };
 
-        var result = await workflow.CheckAsync(settings, manual: false, now, _ => Task.CompletedTask);
+        UpdateCheckResult result = await workflow.CheckAsync(settings, manual: false, now, _ => Task.CompletedTask);
 
         Assert.Equal(UpdateCheckState.Unavailable, result.State);
         Assert.Equal(0, service.CheckCount);
@@ -117,7 +118,7 @@ public sealed class UpdateTests
         };
         var settings = new AppSettings();
 
-        var result = await new UpdateWorkflow(service).CheckAsync(settings, manual: false, now, _ => Task.CompletedTask);
+        UpdateCheckResult result = await new UpdateWorkflow(service).CheckAsync(settings, manual: false, now, _ => Task.CompletedTask);
 
         Assert.Same(available, result.Update);
         Assert.Equal(now, settings.LastUpdateCheckAtUtc);

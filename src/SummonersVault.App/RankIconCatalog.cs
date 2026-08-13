@@ -1,10 +1,10 @@
-namespace SummonersVault.App;
+﻿namespace SummonersVault.App;
 
 internal static class RankIconCatalog
 {
     public static Uri? GetUri(string? tier)
     {
-        var fileName = tier?.Trim().ToUpperInvariant() switch
+        string? fileName = tier?.Trim().ToUpperInvariant() switch
         {
             "IRON" => "Iron.png",
             "BRONZE" => "Bronze.png",

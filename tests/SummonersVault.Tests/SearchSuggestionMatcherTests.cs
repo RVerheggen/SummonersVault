@@ -1,4 +1,4 @@
-using SummonersVault.Core.Services;
+﻿using SummonersVault.Core.Services;
 using Xunit;
 
 namespace SummonersVault.Tests;
@@ -8,7 +8,7 @@ public sealed class SearchSuggestionMatcherTests
     [Fact]
     public void Match_PrioritizesPrefixMatchesForTheReExample()
     {
-        var result = SearchSuggestionMatcher.Match(
+        IReadOnlyList<SearchSuggestionItem> result = SearchSuggestionMatcher.Match(
             ["Ezreal", "Aurelion Sol", "Rell", "Garen", "Rek'Sai", "Ahri"],
             "Re");
 
@@ -22,7 +22,7 @@ public sealed class SearchSuggestionMatcherTests
     [Fact]
     public void Match_PrioritizesAnExactMatchBeforeOtherPrefixes()
     {
-        var result = SearchSuggestionMatcher.Match(["Renata Glasc", "re"], "Re");
+        IReadOnlyList<SearchSuggestionItem> result = SearchSuggestionMatcher.Match(["Renata Glasc", "re"], "Re");
 
         Assert.Equal(["re", "Renata Glasc"], result.Select(item => item.Value));
         Assert.Equal(SearchSuggestionMatchKind.Exact, result[0].MatchKind);
@@ -31,7 +31,7 @@ public sealed class SearchSuggestionMatcherTests
     [Fact]
     public void Match_FindsChampionNameInsideSkinNameAndExcludesUnrelatedSkins()
     {
-        var result = SearchSuggestionMatcher.Match(
+        IReadOnlyList<SearchSuggestionItem> result = SearchSuggestionMatcher.Match(
             ["Brolaf", "Butcher Olaf", "Forsaken Olaf", "PROJECT: Warwick"],
             "oLaF");
 
@@ -41,7 +41,7 @@ public sealed class SearchSuggestionMatcherTests
     [Fact]
     public void Match_HighlightsEveryOccurrenceAndPreservesOriginalCasing()
     {
-        var item = Assert.Single(SearchSuggestionMatcher.Match(["ReRE"], "re"));
+        SearchSuggestionItem item = Assert.Single(SearchSuggestionMatcher.Match(["ReRE"], "re"));
 
         Assert.Equal(["Re", "RE"], item.Segments.Select(segment => segment.Text));
         Assert.All(item.Segments, segment => Assert.True(segment.IsMatch));
@@ -50,7 +50,7 @@ public sealed class SearchSuggestionMatcherTests
     [Fact]
     public void Match_EmptyQueryReturnsDistinctAlphabeticalOptionsWithoutHighlights()
     {
-        var result = SearchSuggestionMatcher.Match(["Zed", "Ahri", "zed", "  "], "  ");
+        IReadOnlyList<SearchSuggestionItem> result = SearchSuggestionMatcher.Match(["Zed", "Ahri", "zed", "  "], "  ");
 
         Assert.Equal(["Ahri", "Zed"], result.Select(item => item.Value));
         Assert.All(result.SelectMany(item => item.Segments), segment => Assert.False(segment.IsMatch));

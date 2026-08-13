@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Windows;
 using SummonersVault.App.Services;
 using SummonersVault.App.ViewModels;
@@ -33,7 +33,7 @@ public partial class UpdateAvailableWindow : Window
         try
         {
             var progress = new Progress<int>(value => DownloadProgress.Value = value);
-            var result = await _viewModel.DownloadUpdateAsync(_update, progress, _downloadCancellation.Token);
+            UpdateDownloadResult result = await _viewModel.DownloadUpdateAsync(_update, progress, _downloadCancellation.Token);
             StatusText.Text = result.Message;
             if (!result.Succeeded)
             {

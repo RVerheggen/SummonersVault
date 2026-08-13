@@ -1,27 +1,22 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
+using SummonersVault.Application.Settings;
 using SummonersVault.Infrastructure.Storage;
 
 namespace SummonersVault.Infrastructure.Settings;
 
-public sealed class AppSettings
-{
-    public int? AutoLockMinutes { get; set; } = 10;
-    public bool LockOnSessionLockOrSleep { get; set; } = true;
-    public string? LeagueInstallDirectory { get; set; }
-    public bool DownloadCommunityDragonArtwork { get; set; } = true;
-    public bool AutomaticallyCheckForUpdates { get; set; } = true;
-    public DateTimeOffset? LastUpdateCheckAtUtc { get; set; }
-}
-
-public sealed class AppSettingsStore(VaultPaths paths)
+public sealed class AppSettingsStore(VaultPaths paths) : IAppSettingsStore
 {
     public async Task<AppSettings> LoadAsync(CancellationToken cancellationToken = default)
     {
-        if (!File.Exists(paths.SettingsPath)) return new();
+        if (!File.Exists(paths.SettingsPath))
+        {
+            return new();
+        }
+
         try
         {
-            await using var stream = File.OpenRead(paths.SettingsPath);
+            await using FileStream stream = File.OpenRead(paths.SettingsPath);
             return await JsonSerializer.DeserializeAsync(stream, AppSettingsJsonContext.Default.AppSettings, cancellationToken).ConfigureAwait(false) ?? new();
         }
         catch (JsonException) { return new(); }

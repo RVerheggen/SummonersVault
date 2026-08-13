@@ -1,7 +1,7 @@
-using System.Net.Http.Headers;
+﻿using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
-using SummonersVault.Core.Abstractions;
+using SummonersVault.Application.Abstractions;
 using SummonersVault.Infrastructure.Storage;
 
 namespace SummonersVault.Infrastructure.Artwork;
@@ -17,6 +17,7 @@ public sealed class ArtworkCacheService : IArtworkService, IDisposable
     private readonly HttpClient _http;
     private readonly bool _ownsClient;
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private int _disposeState;
 
     public ArtworkCacheService(VaultPaths paths, ILeagueClientGateway league, HttpClient? httpClient = null)
     {
@@ -28,32 +29,52 @@ public sealed class ArtworkCacheService : IArtworkService, IDisposable
 
     public async Task<string?> ResolveAsync(string? assetPath, bool allowCommunityDragon, CancellationToken cancellationToken = default)
     {
-        var canonical = Canonicalize(assetPath);
-        if (canonical is null) return null;
+        string? canonical = Canonicalize(assetPath);
+        if (canonical is null)
+        {
+            return null;
+        }
+
         _paths.EnsureArtworkCacheCreated();
-        var cached = FindCached(canonical);
+        string? cached = FindCached(canonical);
         if (cached is not null) { File.SetLastAccessTimeUtc(cached, DateTime.UtcNow); return cached; }
 
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             cached = FindCached(canonical);
-            if (cached is not null) return cached;
+            if (cached is not null)
+            {
+                return cached;
+            }
+
             byte[]? bytes = null;
             string? mediaType = null;
-            if (allowCommunityDragon && TryMapCommunityDragon(canonical, out var uri))
+            if (allowCommunityDragon && TryMapCommunityDragon(canonical, out Uri? uri))
+            {
                 (bytes, mediaType) = await DownloadAsync(uri, cancellationToken).ConfigureAwait(false);
-            bytes ??= await _league.FetchAssetAsync(canonical, cancellationToken).ConfigureAwait(false);
-            if (bytes is null || bytes.LongLength > MaximumImageBytes || !TryDetectImage(bytes, mediaType, out var extension)) return null;
+            }
 
-            var destination = Path.Combine(_paths.ArtworkCacheDirectory, Hash(canonical) + extension);
-            var temporary = destination + ".tmp-" + Guid.NewGuid().ToString("N");
+            bytes ??= await _league.FetchAssetAsync(canonical, cancellationToken).ConfigureAwait(false);
+            if (bytes is null || bytes.LongLength > MaximumImageBytes || !TryDetectImage(bytes, mediaType, out string? extension))
+            {
+                return null;
+            }
+
+            string destination = Path.Combine(_paths.ArtworkCacheDirectory, Hash(canonical) + extension);
+            string temporary = destination + ".tmp-" + Guid.NewGuid().ToString("N");
             try
             {
                 await File.WriteAllBytesAsync(temporary, bytes, cancellationToken).ConfigureAwait(false);
                 File.Move(temporary, destination, overwrite: true);
             }
-            finally { if (File.Exists(temporary)) File.Delete(temporary); }
+            finally
+            {
+                if (File.Exists(temporary))
+                {
+                    File.Delete(temporary);
+                }
+            }
             EnforceLimit(destination);
             return destination;
         }
@@ -62,8 +83,12 @@ public sealed class ArtworkCacheService : IArtworkService, IDisposable
 
     public Task ClearAsync(CancellationToken cancellationToken = default)
     {
-        if (!Directory.Exists(_paths.ArtworkCacheDirectory)) return Task.CompletedTask;
-        foreach (var file in Directory.EnumerateFiles(_paths.ArtworkCacheDirectory))
+        if (!Directory.Exists(_paths.ArtworkCacheDirectory))
+        {
+            return Task.CompletedTask;
+        }
+
+        foreach (string file in Directory.EnumerateFiles(_paths.ArtworkCacheDirectory))
         {
             cancellationToken.ThrowIfCancellationRequested();
             try { File.Delete(file); } catch (IOException) { }
@@ -77,20 +102,36 @@ public sealed class ArtworkCacheService : IArtworkService, IDisposable
     internal static bool TryMapCommunityDragon(string assetPath, out Uri uri)
     {
         uri = CommunityDragonRoot;
-        var canonical = Canonicalize(assetPath);
-        if (canonical is null || !canonical.StartsWith(AssetPrefix, StringComparison.OrdinalIgnoreCase)) return false;
-        var relative = canonical[AssetPrefix.Length..].ToLowerInvariant();
-        if (relative.Length == 0 || relative.Split('/').Any(part => part is "" or "." or "..")) return false;
+        string? canonical = Canonicalize(assetPath);
+        if (canonical is null || !canonical.StartsWith(AssetPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        string relative = canonical[AssetPrefix.Length..].ToLowerInvariant();
+        if (relative.Length == 0 || relative.Split('/').Any(part => part is "" or "." or ".."))
+        {
+            return false;
+        }
+
         uri = new Uri(CommunityDragonRoot, string.Join('/', relative.Split('/').Select(Uri.EscapeDataString)));
         return uri.Scheme == Uri.UriSchemeHttps && uri.Host.Equals("raw.communitydragon.org", StringComparison.OrdinalIgnoreCase);
     }
 
     internal static string? Canonicalize(string? path)
     {
-        if (string.IsNullOrWhiteSpace(path)) return null;
-        var value = path.Trim().Replace('\\', '/');
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return null;
+        }
+
+        string value = path.Trim().Replace('\\', '/');
         if (!value.StartsWith('/') || value.Contains("../", StringComparison.Ordinal) || value.Contains("/./", StringComparison.Ordinal)
-            || value.Contains('?') || value.Contains('#') || Uri.TryCreate(value, UriKind.Absolute, out _)) return null;
+            || value.Contains('?') || value.Contains('#') || Uri.TryCreate(value, UriKind.Absolute, out _))
+        {
+            return null;
+        }
+
         return value;
     }
 
@@ -98,17 +139,29 @@ public sealed class ArtworkCacheService : IArtworkService, IDisposable
     {
         try
         {
-            using var response = await _http.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode || response.Content.Headers.ContentLength > MaximumImageBytes) return (null, null);
-            var mediaType = response.Content.Headers.ContentType?.MediaType;
-            if (mediaType is not null && !mediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)) return (null, null);
-            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            using HttpResponseMessage response = await _http.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode || response.Content.Headers.ContentLength > MaximumImageBytes)
+            {
+                return (null, null);
+            }
+
+            string? mediaType = response.Content.Headers.ContentType?.MediaType;
+            if (mediaType is not null && !mediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+            {
+                return (null, null);
+            }
+
+            await using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
             using var buffer = new MemoryStream();
-            var chunk = new byte[81920];
+            byte[] chunk = new byte[81920];
             int read;
             while ((read = await stream.ReadAsync(chunk, cancellationToken).ConfigureAwait(false)) > 0)
             {
-                if (buffer.Length + read > MaximumImageBytes) return (null, null);
+                if (buffer.Length + read > MaximumImageBytes)
+                {
+                    return (null, null);
+                }
+
                 buffer.Write(chunk, 0, read);
             }
             return (buffer.ToArray(), mediaType);
@@ -119,18 +172,30 @@ public sealed class ArtworkCacheService : IArtworkService, IDisposable
 
     private string? FindCached(string canonical)
     {
-        if (!Directory.Exists(_paths.ArtworkCacheDirectory)) return null;
+        if (!Directory.Exists(_paths.ArtworkCacheDirectory))
+        {
+            return null;
+        }
+
         return Directory.EnumerateFiles(_paths.ArtworkCacheDirectory, Hash(canonical) + ".*").FirstOrDefault();
     }
 
     private void EnforceLimit(string keep)
     {
         var files = Directory.EnumerateFiles(_paths.ArtworkCacheDirectory).Select(path => new FileInfo(path)).OrderBy(x => x.LastAccessTimeUtc).ToList();
-        var total = files.Sum(x => x.Length);
-        foreach (var file in files)
+        long total = files.Sum(x => x.Length);
+        foreach (FileInfo? file in files)
         {
-            if (total <= MaximumCacheBytes) break;
-            if (file.FullName.Equals(keep, StringComparison.OrdinalIgnoreCase)) continue;
+            if (total <= MaximumCacheBytes)
+            {
+                break;
+            }
+
+            if (file.FullName.Equals(keep, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             try { total -= file.Length; file.Delete(); } catch (IOException) { }
         }
     }
@@ -140,15 +205,33 @@ public sealed class ArtworkCacheService : IArtworkService, IDisposable
     private static bool TryDetectImage(byte[] bytes, string? mediaType, out string extension)
     {
         extension = string.Empty;
-        if (bytes.Length >= 8 && bytes.AsSpan(0, 8).SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 })) extension = ".png";
-        else if (bytes.Length >= 3 && bytes[0] == 255 && bytes[1] == 216 && bytes[2] == 255) extension = ".jpg";
-        else if (bytes.Length >= 12 && Encoding.ASCII.GetString(bytes, 0, 4) == "RIFF" && Encoding.ASCII.GetString(bytes, 8, 4) == "WEBP") extension = ".webp";
+        if (bytes.Length >= 8 && bytes.AsSpan(0, 8).SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }))
+        {
+            extension = ".png";
+        }
+        else if (bytes.Length >= 3 && bytes[0] == 255 && bytes[1] == 216 && bytes[2] == 255)
+        {
+            extension = ".jpg";
+        }
+        else if (bytes.Length >= 12 && Encoding.ASCII.GetString(bytes, 0, 4) == "RIFF" && Encoding.ASCII.GetString(bytes, 8, 4) == "WEBP")
+        {
+            extension = ".webp";
+        }
+
         return extension.Length > 0 && (mediaType is null || mediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase));
     }
 
     public void Dispose()
     {
+        if (Interlocked.Exchange(ref _disposeState, 1) != 0)
+        {
+            return;
+        }
+
         _gate.Dispose();
-        if (_ownsClient) _http.Dispose();
+        if (_ownsClient)
+        {
+            _http.Dispose();
+        }
     }
 }

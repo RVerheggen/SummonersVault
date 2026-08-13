@@ -6,3 +6,4 @@ This protects closed vault files and portable backups against casual disclosure 
 
 League Client credentials from its lockfile are ephemeral, remain in memory, and are never persisted. The integration accepts only loopback HTTPS and performs GET requests only.
 
+Ordinary account queries do not materialize stored passwords. Credential reads and writes use dedicated disposable byte buffers that are cleared on disposal. EF Core operates over the same encrypted, non-pooled SQLite3MC connection and does not change the local-only security boundary.

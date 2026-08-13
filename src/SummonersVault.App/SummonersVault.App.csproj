@@ -8,7 +8,7 @@
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <!-- Required by the source-generated DWM LibraryImport in DarkTitleBar.cs. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Version>0.1.2</Version>
+    <Version>1.0.0</Version>
     <SelfContained>true</SelfContained>
     <PublishSingleFile>false</PublishSingleFile>
     <PublishTrimmed>false</PublishTrimmed>
@@ -19,6 +19,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\SummonersVault.Core\SummonersVault.Core.csproj" />
+    <ProjectReference Include="..\SummonersVault.Application\SummonersVault.Application.csproj" />
     <ProjectReference Include="..\SummonersVault.Infrastructure\SummonersVault.Infrastructure.csproj" />
     <PackageReference Include="CommunityToolkit.Mvvm" />
     <PackageReference Include="MahApps.Metro.IconPacks.FontAwesome" />

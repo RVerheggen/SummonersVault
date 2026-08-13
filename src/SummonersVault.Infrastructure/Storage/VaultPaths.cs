@@ -1,4 +1,4 @@
-using System.Security.AccessControl;
+﻿using System.Security.AccessControl;
 using System.Security.Principal;
 
 namespace SummonersVault.Infrastructure.Storage;
@@ -7,7 +7,7 @@ public sealed class VaultPaths
 {
     public VaultPaths(string? rootDirectory = null)
     {
-        var applicationRoot = rootDirectory is null
+        string applicationRoot = rootDirectory is null
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SummonersVault")
             : rootDirectory;
         RootDirectory = rootDirectory is null ? Path.Combine(applicationRoot, "Data") : applicationRoot;
@@ -25,10 +25,14 @@ public sealed class VaultPaths
 
     public void EnsureCreated()
     {
-        var directory = Directory.CreateDirectory(RootDirectory);
-        if (!OperatingSystem.IsWindows()) return;
+        DirectoryInfo directory = Directory.CreateDirectory(RootDirectory);
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
         var identity = WindowsIdentity.GetCurrent();
-        var sid = identity.User ?? throw new InvalidOperationException("The current Windows user could not be identified.");
+        SecurityIdentifier sid = identity.User ?? throw new InvalidOperationException("The current Windows user could not be identified.");
         var security = new DirectorySecurity();
         security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
         security.AddAccessRule(new FileSystemAccessRule(sid, FileSystemRights.FullControl, InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow));
@@ -40,9 +44,13 @@ public sealed class VaultPaths
 
     private static void RestrictDirectory(DirectoryInfo directory)
     {
-        if (!OperatingSystem.IsWindows()) return;
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
         var identity = WindowsIdentity.GetCurrent();
-        var sid = identity.User ?? throw new InvalidOperationException("The current Windows user could not be identified.");
+        SecurityIdentifier sid = identity.User ?? throw new InvalidOperationException("The current Windows user could not be identified.");
         var security = new DirectorySecurity();
         security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
         security.AddAccessRule(new FileSystemAccessRule(sid, FileSystemRights.FullControl, InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow));

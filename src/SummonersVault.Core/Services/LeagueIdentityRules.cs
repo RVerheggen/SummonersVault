@@ -1,4 +1,4 @@
-using SummonersVault.Core.Models;
+﻿using SummonersVault.Core.Models;
 
 namespace SummonersVault.Core.Services;
 

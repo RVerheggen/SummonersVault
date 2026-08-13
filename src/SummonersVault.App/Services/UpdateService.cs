@@ -1,11 +1,11 @@
-using System.IO;
+﻿using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Reflection;
 using Velopack;
 using Velopack.Exceptions;
 using Velopack.Sources;
-using SummonersVault.Infrastructure.Settings;
+using SummonersVault.Application.Settings;
 
 namespace SummonersVault.App.Services;
 
@@ -69,16 +69,20 @@ internal sealed class VelopackUpdateService : IUpdateService
     public async Task<UpdateCheckResult> CheckForUpdatesAsync(CancellationToken cancellationToken = default)
     {
         if (!IsPackaged)
+        {
             return new(UpdateCheckState.Unavailable, "Updates unavailable in development builds");
+        }
 
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var update = await _manager.CheckForUpdatesAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+            UpdateInfo? update = await _manager.CheckForUpdatesAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
             if (update is null)
+            {
                 return new(UpdateCheckState.UpToDate, $"Version {CurrentVersion} is up to date");
+            }
 
-            var asset = update.TargetFullRelease;
+            VelopackAsset asset = update.TargetFullRelease;
             var available = new AvailableUpdate(
                 asset.Version.ToString(),
                 string.IsNullOrWhiteSpace(asset.NotesMarkdown) ? "No release notes were provided for this version." : asset.NotesMarkdown,
@@ -118,7 +122,9 @@ internal sealed class VelopackUpdateService : IUpdateService
     public async Task<UpdateDownloadResult> DownloadAsync(AvailableUpdate update, IProgress<int> progress, CancellationToken cancellationToken = default)
     {
         if (update.NativeUpdate is not UpdateInfo nativeUpdate)
+        {
             return new(false, false, "The selected update is no longer valid. Check for updates again.");
+        }
 
         try
         {
@@ -162,15 +168,25 @@ internal sealed class VelopackUpdateService : IUpdateService
     public void ApplyAndRestart(AvailableUpdate update)
     {
         if (update.NativeUpdate is not UpdateInfo nativeUpdate)
+        {
             throw new InvalidOperationException("The selected update is no longer valid. Check for updates again.");
+        }
 
         _manager.ApplyUpdatesAndRestart(nativeUpdate.TargetFullRelease);
     }
 
     internal static string ResolveCurrentVersion(string? packagedVersion, string? informationalVersion, Version? assemblyVersion)
     {
-        if (!string.IsNullOrWhiteSpace(packagedVersion)) return packagedVersion;
-        if (!string.IsNullOrWhiteSpace(informationalVersion)) return informationalVersion.Split('+', 2)[0];
+        if (!string.IsNullOrWhiteSpace(packagedVersion))
+        {
+            return packagedVersion;
+        }
+
+        if (!string.IsNullOrWhiteSpace(informationalVersion))
+        {
+            return informationalVersion.Split('+', 2)[0];
+        }
+
         return assemblyVersion?.ToString(3) ?? "0.1.0";
     }
 }
@@ -190,9 +206,11 @@ internal sealed class UpdateWorkflow(IUpdateService updateService)
         CancellationToken cancellationToken = default)
     {
         if (!manual && !ShouldRunAutomaticCheck(settings, nowUtc))
+        {
             return new(UpdateCheckState.Unavailable, "An automatic update check is not due yet");
+        }
 
-        var result = await updateService.CheckForUpdatesAsync(cancellationToken);
+        UpdateCheckResult result = await updateService.CheckForUpdatesAsync(cancellationToken);
         if (result.Succeeded)
         {
             settings.LastUpdateCheckAtUtc = nowUtc;

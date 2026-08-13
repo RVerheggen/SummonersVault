@@ -1,4 +1,4 @@
-namespace SummonersVault.Infrastructure.League;
+﻿namespace SummonersVault.Infrastructure.League;
 
 public sealed record LeagueLockfile(string ProcessName, int ProcessId, int Port, string Password, string Protocol)
 {
@@ -7,9 +7,17 @@ public sealed record LeagueLockfile(string ProcessName, int ProcessId, int Port,
     public static bool TryParse(string? value, out LeagueLockfile? lockfile)
     {
         lockfile = null;
-        if (string.IsNullOrWhiteSpace(value)) return false;
-        var parts = value.Trim().Split(':');
-        if (parts.Length != 5 || !int.TryParse(parts[1], out var processId) || !int.TryParse(parts[2], out var port) || port is < 1 or > 65535 || parts[3].Length < 1 || parts[4] is not ("https" or "http")) return false;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        string[] parts = value.Trim().Split(':');
+        if (parts.Length != 5 || !int.TryParse(parts[1], out int processId) || !int.TryParse(parts[2], out int port) || port is < 1 or > 65535 || parts[3].Length < 1 || parts[4] is not ("https" or "http"))
+        {
+            return false;
+        }
+
         lockfile = new(parts[0], processId, port, parts[3], parts[4]);
         return true;
     }

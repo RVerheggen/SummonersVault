@@ -15,7 +15,6 @@ jobs:
     if: github.event.created == true && github.event.deleted == false
     runs-on: windows-latest
     env:
-      VPK_VERSION: 1.2.0
       RELEASE_DIR: artifacts/releases
       PUBLISH_DIR: artifacts/publish/win-x64
     steps:
@@ -47,15 +46,23 @@ jobs:
       - name: Restore
         run: dotnet restore SummonersVault.slnx
 
+      - name: Restore pinned tools
+        run: dotnet tool restore
+
+      - name: Verify formatting and code style
+        run: dotnet format SummonersVault.slnx --no-restore --verify-no-changes
+
+      - name: Build
+        run: dotnet build SummonersVault.slnx -c Release --no-restore
+
+      - name: Verify EF Core model matches migrations
+        run: dotnet ef migrations has-pending-model-changes --project src/SummonersVault.Infrastructure/SummonersVault.Infrastructure.csproj --context VaultDbContext --configuration Release --no-build
+
       - name: Test
-        run: dotnet test SummonersVault.slnx -c Release --no-restore
+        run: dotnet test SummonersVault.slnx -c Release --no-build
 
       - name: Publish self-contained application
         run: dotnet publish src/SummonersVault.App/SummonersVault.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o $env:PUBLISH_DIR
-
-      - name: Install pinned Velopack CLI
-        shell: pwsh
-        run: dotnet tool install --tool-path .tools vpk --version $env:VPK_VERSION
 
       - name: Download previous release for delta generation
         shell: pwsh
@@ -64,7 +71,7 @@ jobs:
         run: |
           $latestTag = gh release list --repo "${{ github.repository }}" --exclude-drafts --exclude-pre-releases --limit 1 --json tagName --jq '.[0].tagName'
           if (-not [string]::IsNullOrWhiteSpace($latestTag)) {
-            .\.tools\vpk download github --repoUrl "https://github.com/${{ github.repository }}" --token $env:GITHUB_TOKEN --outputDir $env:RELEASE_DIR
+            dotnet vpk download github --repoUrl "https://github.com/${{ github.repository }}" --token $env:GITHUB_TOKEN --outputDir $env:RELEASE_DIR
             if ($LASTEXITCODE -ne 0) { throw "Could not download the previous release." }
           } else {
             Write-Host "No previous stable release found. Building a full package only."
@@ -73,7 +80,7 @@ jobs:
       - name: Package installer and portable release
         shell: pwsh
         run: |
-          .\.tools\vpk pack `
+          dotnet vpk pack `
             --packId SummonersVault.Desktop `
             --packTitle SummonersVault `
             --packVersion "${{ steps.release-version.outputs.version }}" `
@@ -109,7 +116,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          .\.tools\vpk upload github `
+          dotnet vpk upload github `
             --repoUrl "https://github.com/${{ github.repository }}" `
             --token $env:GITHUB_TOKEN `
             --outputDir $env:RELEASE_DIR `

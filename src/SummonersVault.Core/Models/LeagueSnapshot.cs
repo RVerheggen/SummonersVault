@@ -1,4 +1,4 @@
-namespace SummonersVault.Core.Models;
+﻿namespace SummonersVault.Core.Models;
 
 public sealed class LeagueSnapshot
 {

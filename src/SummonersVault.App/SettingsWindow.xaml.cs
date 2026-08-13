@@ -1,10 +1,11 @@
-using System.IO;
+﻿using System.IO;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Win32;
 using SummonersVault.App.Services;
 using SummonersVault.App.ViewModels;
-using SummonersVault.Infrastructure.Settings;
+using SummonersVault.Application.Settings;
 
 namespace SummonersVault.App;
 
@@ -21,13 +22,18 @@ public partial class SettingsWindow : Window
         RefreshUpdateDetails();
         UpdateCacheSize();
         foreach (ComboBoxItem item in AutoLock.Items)
-            if ((viewModel.Settings.AutoLockMinutes is null && Equals(item.Tag, "never")) || Equals(item.Tag?.ToString(), viewModel.Settings.AutoLockMinutes?.ToString())) { AutoLock.SelectedItem = item; break; }
+        {
+            if ((viewModel.Settings.AutoLockMinutes is null && Equals(item.Tag, "never")) || Equals(item.Tag?.ToString(), viewModel.Settings.AutoLockMinutes?.ToString(CultureInfo.InvariantCulture))) { AutoLock.SelectedItem = item; break; }
+        }
     }
 
     private void Browse_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new OpenFolderDialog { Title = "Select Riot Games installation folder", Multiselect = false };
-        if (dialog.ShowDialog(this) == true) LeaguePath.Text = dialog.FolderName;
+        if (dialog.ShowDialog(this) == true)
+        {
+            LeaguePath.Text = dialog.FolderName;
+        }
     }
 
     private async void Save_Click(object sender, RoutedEventArgs e)
@@ -35,11 +41,15 @@ public partial class SettingsWindow : Window
         try
         {
             var selection = (ComboBoxItem?)AutoLock.SelectedItem;
-            int? minutes = Equals(selection?.Tag, "never") ? null : int.TryParse(selection?.Tag?.ToString(), out var value) ? value : 10;
+            int? minutes = Equals(selection?.Tag, "never") ? null : int.TryParse(selection?.Tag?.ToString(), out int value) ? value : 10;
             await _viewModel.SaveSettingsAsync(new AppSettings { AutoLockMinutes = minutes, LockOnSessionLockOrSleep = SessionLock.IsChecked == true, LeagueInstallDirectory = string.IsNullOrWhiteSpace(LeaguePath.Text) ? null : LeaguePath.Text.Trim(), DownloadCommunityDragonArtwork = CommunityDragonDownloads.IsChecked == true, AutomaticallyCheckForUpdates = AutomaticUpdates.IsChecked == true, LastUpdateCheckAtUtc = _viewModel.Settings.LastUpdateCheckAtUtc });
             if (CurrentPassword.SecurePassword.Length + NewPassword.SecurePassword.Length + ConfirmPassword.SecurePassword.Length > 0)
             {
-                if (CurrentPassword.SecurePassword.Length == 0 || NewPassword.SecurePassword.Length == 0 || ConfirmPassword.SecurePassword.Length == 0) throw new ArgumentException("Complete all master-password fields.");
+                if (CurrentPassword.SecurePassword.Length == 0 || NewPassword.SecurePassword.Length == 0 || ConfirmPassword.SecurePassword.Length == 0)
+                {
+                    throw new ArgumentException("Complete all master-password fields.");
+                }
+
                 await _viewModel.ChangeMasterPasswordAsync(SecurePasswordBytes.From(CurrentPassword.SecurePassword), SecurePasswordBytes.From(NewPassword.SecurePassword), SecurePasswordBytes.From(ConfirmPassword.SecurePassword));
             }
             DialogResult = true;
@@ -55,12 +65,16 @@ public partial class SettingsWindow : Window
         CheckUpdatesButton.IsEnabled = false;
         try
         {
-            var result = await _viewModel.CheckForUpdatesAsync(manual: true);
+            UpdateCheckResult result = await _viewModel.CheckForUpdatesAsync(manual: true);
             RefreshUpdateDetails();
             if (result.Update is not null)
+            {
                 new UpdateAvailableWindow(_viewModel, result.Update) { Owner = this }.ShowDialog();
+            }
             else if (result.State == UpdateCheckState.Failed)
+            {
                 MessageBox.Show(this, result.Message, "Unable to check for updates", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
         }
         finally { CheckUpdatesButton.IsEnabled = _viewModel.UpdatesAvailable; }
     }

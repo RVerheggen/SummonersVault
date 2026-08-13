@@ -1,9 +1,9 @@
-using System.Windows;
+﻿using System.Windows;
 using System.IO;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using SummonersVault.Core.Abstractions;
+using SummonersVault.Application.Abstractions;
 
 namespace SummonersVault.App.Controls;
 
@@ -18,8 +18,8 @@ public sealed class ArtworkImage : Grid
 
     public ArtworkImage()
     {
-        Background = (Brush)Application.Current.FindResource("SurfaceMutedBrush");
-        Children.Add(new TextBlock { Text = "◇", FontSize = 28, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Foreground = (Brush)Application.Current.FindResource("HighlightBrush") });
+        Background = (Brush)System.Windows.Application.Current.FindResource("SurfaceMutedBrush");
+        Children.Add(new TextBlock { Text = "◇", FontSize = 28, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Foreground = (Brush)System.Windows.Application.Current.FindResource("HighlightBrush") });
         Children.Add(_image);
         Loaded += (_, _) => { AttachHostClip(); StartLoad(); };
         Unloaded += (_, _) => { CancelLoad(); DetachHostClip(); };
@@ -37,7 +37,11 @@ public sealed class ArtworkImage : Grid
     {
         DependencyObject? current = this;
         while ((current = VisualTreeHelper.GetParent(current)) is not null && current is not Border) { }
-        if (current is not Border border) return;
+        if (current is not Border border)
+        {
+            return;
+        }
+
         _clipHost = border;
         _clipHost.SizeChanged += HostSizeChanged;
         UpdateHostClip();
@@ -47,13 +51,21 @@ public sealed class ArtworkImage : Grid
 
     private void UpdateHostClip()
     {
-        if (_clipHost is not { ActualWidth: > 0, ActualHeight: > 0 } host) return;
+        if (_clipHost is not { ActualWidth: > 0, ActualHeight: > 0 } host)
+        {
+            return;
+        }
+
         host.Clip = new RectangleGeometry(new Rect(0, 0, host.ActualWidth, host.ActualHeight), 16, 16);
     }
 
     private void DetachHostClip()
     {
-        if (_clipHost is null) return;
+        if (_clipHost is null)
+        {
+            return;
+        }
+
         _clipHost.SizeChanged -= HostSizeChanged;
         _clipHost = null;
     }
@@ -66,13 +78,21 @@ public sealed class ArtworkImage : Grid
 
     private async void StartLoad()
     {
-        if (!IsLoaded || ArtworkService is null || string.IsNullOrWhiteSpace(AssetPath)) return;
+        if (!IsLoaded || ArtworkService is null || string.IsNullOrWhiteSpace(AssetPath))
+        {
+            return;
+        }
+
         CancelLoad();
         _load = new CancellationTokenSource();
         try
         {
-            var path = await ArtworkService.ResolveAsync(AssetPath, AllowCommunityDragon, _load.Token);
-            if (path is null) return;
+            string? path = await ArtworkService.ResolveAsync(AssetPath, AllowCommunityDragon, _load.Token);
+            if (path is null)
+            {
+                return;
+            }
+
             var bitmap = new BitmapImage();
             bitmap.BeginInit(); bitmap.CacheOption = BitmapCacheOption.OnLoad; bitmap.UriSource = new Uri(path); bitmap.EndInit(); bitmap.Freeze();
             _image.Source = bitmap;

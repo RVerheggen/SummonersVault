@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 using NSec.Cryptography;
 
@@ -14,11 +14,11 @@ public static class VaultKeyEnvelope
     public static VaultMetadata Create(Guid vaultId, ReadOnlySpan<byte> masterPasswordUtf8, ReadOnlySpan<byte> databaseKey)
     {
         ValidateMasterPassword(masterPasswordUtf8);
-        var salt = RandomNumberGenerator.GetBytes(16);
-        var nonce = RandomNumberGenerator.GetBytes(12);
-        var wrapKey = Derive(masterPasswordUtf8, salt, MemoryBytes, Passes, Parallelism);
-        var ciphertext = new byte[databaseKey.Length];
-        var tag = new byte[16];
+        byte[] salt = RandomNumberGenerator.GetBytes(16);
+        byte[] nonce = RandomNumberGenerator.GetBytes(12);
+        byte[] wrapKey = Derive(masterPasswordUtf8, salt, MemoryBytes, Passes, Parallelism);
+        byte[] ciphertext = new byte[databaseKey.Length];
+        byte[] tag = new byte[16];
         try
         {
             using var aes = new AesGcm(wrapKey, tag.Length);
@@ -40,7 +40,10 @@ public static class VaultKeyEnvelope
     {
         databaseKey = [];
         if (metadata.FormatVersion != 1 || metadata.Kdf.Algorithm != "argon2id" || metadata.KeyEnvelope.Algorithm != "aes-256-gcm"
-            || metadata.Kdf.MemoryBytes != MemoryBytes || metadata.Kdf.Passes != Passes || metadata.Kdf.Parallelism != Parallelism) return false;
+            || metadata.Kdf.MemoryBytes != MemoryBytes || metadata.Kdf.Passes != Passes || metadata.Kdf.Parallelism != Parallelism)
+        {
+            return false;
+        }
 
         byte[] salt;
         byte[] nonce;
@@ -58,8 +61,8 @@ public static class VaultKeyEnvelope
             return false;
         }
 
-        var wrapKey = Derive(masterPasswordUtf8, salt, metadata.Kdf.MemoryBytes, metadata.Kdf.Passes, metadata.Kdf.Parallelism);
-        var candidate = new byte[ciphertext.Length];
+        byte[] wrapKey = Derive(masterPasswordUtf8, salt, metadata.Kdf.MemoryBytes, metadata.Kdf.Passes, metadata.Kdf.Parallelism);
+        byte[] candidate = new byte[ciphertext.Length];
         try
         {
             using var aes = new AesGcm(wrapKey, tag.Length);
@@ -82,7 +85,9 @@ public static class VaultKeyEnvelope
     public static void ValidateMasterPassword(ReadOnlySpan<byte> passwordUtf8)
     {
         if (Encoding.UTF8.GetCharCount(passwordUtf8) < MinimumMasterPasswordLength)
+        {
             throw new ArgumentException($"Master password must contain at least {MinimumMasterPasswordLength} characters.", nameof(passwordUtf8));
+        }
     }
 
     private static byte[] Derive(ReadOnlySpan<byte> password, ReadOnlySpan<byte> salt, long memoryBytes, long passes, int parallelism)
@@ -94,7 +99,7 @@ public static class VaultKeyEnvelope
             NumberOfPasses = passes,
             DegreeOfParallelism = parallelism
         };
-        var algorithm = PasswordBasedKeyDerivationAlgorithm.Argon2id(in parameters);
+        Argon2id algorithm = PasswordBasedKeyDerivationAlgorithm.Argon2id(in parameters);
         return algorithm.DeriveBytes(password, salt, 32);
     }
 

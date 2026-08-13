@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 
@@ -13,11 +13,17 @@ public static partial class DarkTitleBar
 
     private static void Apply(Window window)
     {
-        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17763)) return;
-        var enabled = 1;
-        var handle = new WindowInteropHelper(window).Handle;
+        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17763))
+        {
+            return;
+        }
+
+        int enabled = 1;
+        nint handle = new WindowInteropHelper(window).Handle;
         if (DwmSetWindowAttribute(handle, 20, ref enabled, sizeof(int)) != 0)
+        {
             _ = DwmSetWindowAttribute(handle, 19, ref enabled, sizeof(int));
+        }
     }
 
     [LibraryImport("dwmapi.dll")]

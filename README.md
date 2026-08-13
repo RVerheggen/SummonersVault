@@ -39,6 +39,10 @@ gh attestation verify .\SummonersVault.Desktop-win-Setup.exe -R RVerheggen/Summo
 
 See [the release guide](docs/releasing.md) for local packaging, checksum verification, and the public-release security checklist.
 
+## Architecture and contributing
+
+The solution is divided into Core, Application, Infrastructure, and WPF presentation projects. Local encrypted persistence uses EF Core over the SQLite3MC connection, with migrations checked into source control. See [the architecture and database guide](docs/architecture.md) for dependency boundaries, public schema v4 adoption, backup compatibility, and required contributor checks.
+
 ## License, forks, and branding
 
 SummonersVault source code is licensed under the [GNU General Public License version 3 only](LICENSE), except where another license or ownership notice is stated. Distributed modifications must remain available under GPLv3 and include the corresponding source code.

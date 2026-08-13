@@ -1,11 +1,14 @@
-namespace SummonersVault.Core.Models;
+﻿namespace SummonersVault.Core.Models;
 
 public static class LeagueRegion
 {
     public static string Normalize(string? value)
     {
-        var region = value?.Trim().ToUpperInvariant() ?? string.Empty;
-        if (region.Length == 0) return region;
+        string region = value?.Trim().ToUpperInvariant() ?? string.Empty;
+        if (region.Length == 0)
+        {
+            return region;
+        }
 
         return region switch
         {

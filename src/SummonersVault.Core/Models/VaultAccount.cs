@@ -1,4 +1,4 @@
-namespace SummonersVault.Core.Models;
+﻿namespace SummonersVault.Core.Models;
 
 [Flags]
 public enum AccountRole
@@ -31,8 +31,7 @@ public sealed record SnapshotCategoryStatus(
 public sealed class VaultAccount
 {
     public Guid Id { get; set; } = Guid.NewGuid();
-    public string LoginIdentifier { get; set; } = string.Empty;
-    public byte[] PasswordUtf8 { get; set; } = [];
+    public string Username { get; set; } = string.Empty;
     public string? Label { get; set; }
     public string Region { get; set; } = "EUW";
     public string? Notes { get; set; }
@@ -63,17 +62,11 @@ public sealed class VaultAccount
         ? Label
         : !string.IsNullOrWhiteSpace(RiotGameName)
             ? $"{RiotGameName}#{RiotTagLine}"
-            : LoginIdentifier;
+            : Username;
 
     public RankSnapshot? CardRank => Ranks.FirstOrDefault(x => x.QueueType == "RANKED_SOLO_5x5")
         ?? Ranks.FirstOrDefault(x => x.QueueType == "RANKED_FLEX_SR");
 
-    public VaultAccount CloneWithoutPassword()
-    {
-        var clone = (VaultAccount)MemberwiseClone();
-        clone.PasswordUtf8 = [];
-        return clone;
-    }
 }
 
 public sealed record RankSnapshot(

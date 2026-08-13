@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Windows;
 using System.Windows.Automation;
@@ -67,7 +67,7 @@ public partial class SearchableFilterBox : UserControl
             _ownerWindow.Deactivated += OwnerWindow_Deactivated;
         }
 
-        var automationName = AutomationProperties.GetName(this);
+        string automationName = AutomationProperties.GetName(this);
         if (!string.IsNullOrWhiteSpace(automationName))
         {
             AutomationProperties.SetName(Input, automationName);
@@ -78,7 +78,11 @@ public partial class SearchableFilterBox : UserControl
 
     private void SearchableFilterBox_Unloaded(object sender, RoutedEventArgs e)
     {
-        if (_ownerWindow is null) return;
+        if (_ownerWindow is null)
+        {
+            return;
+        }
+
         _ownerWindow.PreviewMouseDown -= OwnerWindow_PreviewMouseDown;
         _ownerWindow.Deactivated -= OwnerWindow_Deactivated;
         _ownerWindow = null;
@@ -86,9 +90,10 @@ public partial class SearchableFilterBox : UserControl
 
     private void ObserveCollection(INotifyCollectionChanged? oldCollection, INotifyCollectionChanged? newCollection)
     {
-        if (oldCollection is not null) oldCollection.CollectionChanged -= SuggestionsChanged;
+        oldCollection?.CollectionChanged -= SuggestionsChanged;
+
         _observedCollection = newCollection;
-        if (_observedCollection is not null) _observedCollection.CollectionChanged += SuggestionsChanged;
+        _observedCollection?.CollectionChanged += SuggestionsChanged;
     }
 
     private void SuggestionsChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
@@ -96,11 +101,18 @@ public partial class SearchableFilterBox : UserControl
 
     private void RefreshSuggestions(bool openWhenFocused)
     {
-        if (SuggestionList is null) return;
+        if (SuggestionList is null)
+        {
+            return;
+        }
 
-        var matches = SearchSuggestionMatcher.Match(ItemsSource ?? [], Text);
+        IReadOnlyList<SearchSuggestionItem> matches = SearchSuggestionMatcher.Match(ItemsSource ?? [], Text);
         _visibleSuggestions.Clear();
-        foreach (var match in matches) _visibleSuggestions.Add(match);
+        foreach (SearchSuggestionItem match in matches)
+        {
+            _visibleSuggestions.Add(match);
+        }
+
         SuggestionList.SelectedIndex = _visibleSuggestions.Count > 0 ? 0 : -1;
 
         if (_visibleSuggestions.Count == 0)
@@ -109,7 +121,10 @@ public partial class SearchableFilterBox : UserControl
             return;
         }
 
-        if (openWhenFocused && Input.IsKeyboardFocusWithin && !_isCommitting) OpenPopup();
+        if (openWhenFocused && Input.IsKeyboardFocusWithin && !_isCommitting)
+        {
+            OpenPopup();
+        }
     }
 
     private void Input_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -121,16 +136,24 @@ public partial class SearchableFilterBox : UserControl
         }
         else if (e.Key == Key.Down)
         {
-            var wasOpen = SuggestionPopup.IsOpen;
+            bool wasOpen = SuggestionPopup.IsOpen;
             EnsurePopupOpen();
-            if (wasOpen) MoveActiveSuggestion(1);
+            if (wasOpen)
+            {
+                MoveActiveSuggestion(1);
+            }
+
             e.Handled = true;
         }
         else if (e.Key == Key.Up)
         {
-            var wasOpen = SuggestionPopup.IsOpen;
+            bool wasOpen = SuggestionPopup.IsOpen;
             EnsurePopupOpen();
-            if (wasOpen) MoveActiveSuggestion(-1);
+            if (wasOpen)
+            {
+                MoveActiveSuggestion(-1);
+            }
+
             e.Handled = true;
         }
         else if (e.Key == Key.Enter && SuggestionPopup.IsOpen && SuggestionList.SelectedItem is SearchSuggestionItem item)
@@ -157,51 +180,81 @@ public partial class SearchableFilterBox : UserControl
 
     private void OwnerWindow_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (SuggestionPopup.IsOpen && !IsMouseOver) ClosePopup();
+        if (SuggestionPopup.IsOpen && !IsMouseOver)
+        {
+            ClosePopup();
+        }
     }
 
     private void OwnerWindow_Deactivated(object? sender, EventArgs e) => ClosePopup();
 
     private void SuggestionList_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        if (e.OriginalSource is not DependencyObject source) return;
+        if (e.OriginalSource is not DependencyObject source)
+        {
+            return;
+        }
+
         if (ItemsControl.ContainerFromElement(SuggestionList, source) is ListBoxItem { DataContext: SearchSuggestionItem item })
+        {
             Commit(item);
+        }
     }
 
     private void SuggestionPopup_Closed(object? sender, EventArgs e) => DropDownToggle.IsChecked = false;
 
     private void TogglePopup()
     {
-        if (SuggestionPopup.IsOpen) ClosePopup();
-        else EnsurePopupOpen();
+        if (SuggestionPopup.IsOpen)
+        {
+            ClosePopup();
+        }
+        else
+        {
+            EnsurePopupOpen();
+        }
     }
 
     private void EnsurePopupOpen()
     {
         RefreshSuggestions(openWhenFocused: false);
-        if (_visibleSuggestions.Count > 0) OpenPopup();
+        if (_visibleSuggestions.Count > 0)
+        {
+            OpenPopup();
+        }
     }
 
     private void OpenPopup()
     {
         SuggestionPopup.IsOpen = true;
         DropDownToggle.IsChecked = true;
-        if (SuggestionList.SelectedIndex < 0 && _visibleSuggestions.Count > 0) SuggestionList.SelectedIndex = 0;
+        if (SuggestionList.SelectedIndex < 0 && _visibleSuggestions.Count > 0)
+        {
+            SuggestionList.SelectedIndex = 0;
+        }
+
         SuggestionList.ScrollIntoView(SuggestionList.SelectedItem);
     }
 
     private void ClosePopup()
     {
-        if (SuggestionPopup is null) return;
+        if (SuggestionPopup is null)
+        {
+            return;
+        }
+
         SuggestionPopup.IsOpen = false;
-        if (DropDownToggle is not null) DropDownToggle.IsChecked = false;
+        DropDownToggle?.IsChecked = false;
     }
 
     private void MoveActiveSuggestion(int delta)
     {
-        if (_visibleSuggestions.Count == 0) return;
-        var current = SuggestionList.SelectedIndex < 0 ? 0 : SuggestionList.SelectedIndex;
+        if (_visibleSuggestions.Count == 0)
+        {
+            return;
+        }
+
+        int current = SuggestionList.SelectedIndex < 0 ? 0 : SuggestionList.SelectedIndex;
         SuggestionList.SelectedIndex = Math.Clamp(current + delta, 0, _visibleSuggestions.Count - 1);
         SuggestionList.ScrollIntoView(SuggestionList.SelectedItem);
     }

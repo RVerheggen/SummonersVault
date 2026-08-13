@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Threading;
 
 namespace SummonersVault.App.Services;
@@ -23,7 +23,10 @@ public sealed class SafeClipboardService(Dispatcher dispatcher)
         _timer = null;
         try
         {
-            if (_ownedValue is not null && Clipboard.ContainsText() && string.Equals(Clipboard.GetText(), _ownedValue, StringComparison.Ordinal)) Clipboard.Clear();
+            if (_ownedValue is not null && Clipboard.ContainsText() && string.Equals(Clipboard.GetText(), _ownedValue, StringComparison.Ordinal))
+            {
+                Clipboard.Clear();
+            }
         }
         catch (System.Runtime.InteropServices.COMException) { }
         _ownedValue = null;

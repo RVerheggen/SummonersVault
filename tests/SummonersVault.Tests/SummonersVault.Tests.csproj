@@ -6,6 +6,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\SummonersVault.Core\SummonersVault.Core.csproj" />
+    <ProjectReference Include="..\..\src\SummonersVault.Application\SummonersVault.Application.csproj" />
     <ProjectReference Include="..\..\src\SummonersVault.Infrastructure\SummonersVault.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\SummonersVault.App\SummonersVault.App.csproj" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
