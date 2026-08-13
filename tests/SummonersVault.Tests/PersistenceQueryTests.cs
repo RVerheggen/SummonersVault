@@ -13,7 +13,7 @@ public sealed class PersistenceQueryTests
     public async Task AccountReadQuery_LoadsSiblingCollectionsUsingSeparateCommands()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync();
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
         var commandCounter = new ReaderCommandCounter();
         var contextFactory = new VaultDbContextFactory(connection, commandCounter);
 
@@ -38,7 +38,7 @@ public sealed class PersistenceQueryTests
     public async Task VaultDbContext_DefaultsSiblingCollectionQueriesToSplitQueries()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync();
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
         var commandCounter = new ReaderCommandCounter();
         var contextFactory = new VaultDbContextFactory(connection, commandCounter);
 

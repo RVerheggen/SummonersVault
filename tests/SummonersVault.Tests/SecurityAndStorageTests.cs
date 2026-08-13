@@ -59,14 +59,14 @@ public sealed class SecurityAndStorageTests
         try
         {
             var paths = new VaultPaths(root); await using var repository = new EncryptedVaultStore(paths); await using var session = new VaultSession(paths, repository);
-            await session.CreateAsync("old password"u8.ToArray());
+            await session.CreateAsync("old password"u8.ToArray(), TestContext.Current.CancellationToken);
             using (var password = new SensitiveBuffer("kept-secret"u8.ToArray()))
             {
-                await repository.SaveAccountAsync(new(new VaultAccount { Username = "rewrap-user", Region = "EUW1" }, password));
+                await repository.SaveAccountAsync(new(new VaultAccount { Username = "rewrap-user", Region = "EUW1" }, password), TestContext.Current.CancellationToken);
             }
-            await session.ChangeMasterPasswordAsync("old password"u8.ToArray(), "new password"u8.ToArray()); await session.LockAsync();
-            Assert.False(await session.UnlockAsync("old password"u8.ToArray())); Assert.True(await session.UnlockAsync("new password"u8.ToArray()));
-            Assert.Equal("rewrap-user", Assert.Single(await repository.GetAccountsAsync()).Username);
+            await session.ChangeMasterPasswordAsync("old password"u8.ToArray(), "new password"u8.ToArray(), TestContext.Current.CancellationToken); await session.LockAsync(TestContext.Current.CancellationToken);
+            Assert.False(await session.UnlockAsync("old password"u8.ToArray(), TestContext.Current.CancellationToken)); Assert.True(await session.UnlockAsync("new password"u8.ToArray(), TestContext.Current.CancellationToken));
+            Assert.Equal("rewrap-user", Assert.Single(await repository.GetAccountsAsync(TestContext.Current.CancellationToken)).Username);
         }
         finally
         {
@@ -305,11 +305,11 @@ public sealed class SecurityAndStorageTests
         try
         {
             var paths = new VaultPaths(root); await using var repository = new EncryptedVaultStore(paths);
-            await repository.OpenAsync(RandomNumberGenerator.GetBytes(32), create: true);
+            await repository.OpenAsync(RandomNumberGenerator.GetBytes(32), create: true, TestContext.Current.CancellationToken);
             var account = new VaultAccount { Username = "rich", Region = "EUW" };
             using (var password = new SensitiveBuffer("secret"u8.ToArray()))
             {
-                await repository.SaveAccountAsync(new(account, password));
+                await repository.SaveAccountAsync(new(account, password), TestContext.Current.CancellationToken);
             }
             await repository.ApplyLeagueSnapshotAsync(account.Id, new LeagueSnapshot
             {
@@ -322,9 +322,9 @@ public sealed class SecurityAndStorageTests
                 Skins = [new(1001, 1, "Goth Annie", "/lol-game-data/assets/c.jpg", "/lol-game-data/assets/d.jpg")],
                 CraftingLoot = [new("loot", "loot", "MATERIAL", "Materials", "Key", null, 3, "Rare", null, null, null, "/lol-game-data/assets/key.png", null, 10, 20)],
                 Wallet = new(100, 200)
-            });
-            await repository.ApplyLeagueSnapshotAsync(account.Id, Snapshot(MatchSnapshotResult.Failed));
-            VaultAccount? loaded = await repository.GetAccountAsync(account.Id);
+            }, TestContext.Current.CancellationToken);
+            await repository.ApplyLeagueSnapshotAsync(account.Id, Snapshot(MatchSnapshotResult.Failed), TestContext.Current.CancellationToken);
+            VaultAccount? loaded = await repository.GetAccountAsync(account.Id, TestContext.Current.CancellationToken);
             Assert.Equal("/lol-game-data/assets/a.jpg", Assert.Single(loaded!.Champions).BaseSplashAssetPath);
             Assert.True(Assert.Single(loaded.Ranks).IsProvisional);
             Assert.Equal(3, Assert.Single(loaded.LootItems).Count);
@@ -345,10 +345,10 @@ public sealed class SecurityAndStorageTests
         string path = Path.GetTempFileName();
         try
         {
-            await File.WriteAllTextAsync(path, "LeagueClient:1234:2999:secret:https");
+            await File.WriteAllTextAsync(path, "LeagueClient:1234:2999:secret:https", TestContext.Current.CancellationToken);
             await using var clientHandle = new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.Read);
-            await Assert.ThrowsAsync<IOException>(() => File.ReadAllTextAsync(path));
-            Assert.Equal("LeagueClient:1234:2999:secret:https", await LeagueClientGateway.ReadLockfileAsync(path));
+            await Assert.ThrowsAsync<IOException>(() => File.ReadAllTextAsync(path, TestContext.Current.CancellationToken));
+            Assert.Equal("LeagueClient:1234:2999:secret:https", await LeagueClientGateway.ReadLockfileAsync(path, TestContext.Current.CancellationToken));
         }
         finally { File.Delete(path); }
     }
@@ -376,27 +376,27 @@ public sealed class SecurityAndStorageTests
         {
             var paths = new VaultPaths(root); byte[] key = RandomNumberGenerator.GetBytes(32);
             await using var repository = new EncryptedVaultStore(paths);
-            await repository.OpenAsync(key, create: true);
+            await repository.OpenAsync(key, create: true, TestContext.Current.CancellationToken);
             var account = new VaultAccount { Username = "plaintext-login-marker", Region = "EUW1", Roles = AccountRole.Mid | AccountRole.Support };
             account.Champions.Add(new(1, "Annie")); account.Skins.Add(new(1000, 1, "Annie")); account.Skins.Add(new(1001, 1, "Goth Annie"));
             using (var password = new SensitiveBuffer(Encoding.UTF8.GetBytes("plaintext-password-marker")))
             {
-                await repository.SaveAccountAsync(new(account, password));
+                await repository.SaveAccountAsync(new(account, password), TestContext.Current.CancellationToken);
             }
             var newest = new DateTimeOffset(2026, 8, 5, 22, 30, 0, TimeSpan.Zero);
-            await repository.ApplyLeagueSnapshotAsync(account.Id, Snapshot(MatchSnapshotResult.Known(newest, 42), new(975, 123456)));
-            await repository.ApplyLeagueSnapshotAsync(account.Id, Snapshot(MatchSnapshotResult.Known(newest.AddDays(-1), 41)));
-            VaultAccount? loaded = await repository.GetAccountAsync(account.Id);
+            await repository.ApplyLeagueSnapshotAsync(account.Id, Snapshot(MatchSnapshotResult.Known(newest, 42), new(975, 123456)), TestContext.Current.CancellationToken);
+            await repository.ApplyLeagueSnapshotAsync(account.Id, Snapshot(MatchSnapshotResult.Known(newest.AddDays(-1), 41)), TestContext.Current.CancellationToken);
+            VaultAccount? loaded = await repository.GetAccountAsync(account.Id, TestContext.Current.CancellationToken);
             Assert.Equal(newest, loaded?.LastMatchPlayedAtUtc); Assert.Equal(42, loaded?.LastMatchId);
-            await repository.ApplyLeagueSnapshotAsync(account.Id, Snapshot(MatchSnapshotResult.Failed));
-            loaded = await repository.GetAccountAsync(account.Id);
+            await repository.ApplyLeagueSnapshotAsync(account.Id, Snapshot(MatchSnapshotResult.Failed), TestContext.Current.CancellationToken);
+            loaded = await repository.GetAccountAsync(account.Id, TestContext.Current.CancellationToken);
             Assert.Equal(MatchHistoryState.Stale, loaded?.MatchHistoryState); Assert.Equal(newest, loaded?.LastMatchPlayedAtUtc);
             Assert.Equal("Goth Annie", Assert.Single(loaded!.Skins).Name);
             Assert.Equal(975, loaded.RiotPoints); Assert.Equal(123456, loaded.BlueEssence);
-            await repository.CloseAsync();
-            byte[] bytes = await File.ReadAllBytesAsync(paths.DatabasePath); string text = Encoding.UTF8.GetString(bytes);
+            await repository.CloseAsync(TestContext.Current.CancellationToken);
+            byte[] bytes = await File.ReadAllBytesAsync(paths.DatabasePath, TestContext.Current.CancellationToken); string text = Encoding.UTF8.GetString(bytes);
             Assert.DoesNotContain("plaintext-login-marker", text, StringComparison.Ordinal); Assert.DoesNotContain("plaintext-password-marker", text, StringComparison.Ordinal);
-            await Assert.ThrowsAnyAsync<Exception>(async () => { await using var wrong = new EncryptedVaultStore(paths); await wrong.OpenAsync(RandomNumberGenerator.GetBytes(32), create: false); });
+            await Assert.ThrowsAnyAsync<Exception>(async () => { await using var wrong = new EncryptedVaultStore(paths); await wrong.OpenAsync(RandomNumberGenerator.GetBytes(32), create: false, TestContext.Current.CancellationToken); });
             CryptographicOperations.ZeroMemory(key);
         }
         finally
@@ -417,27 +417,27 @@ public sealed class SecurityAndStorageTests
         {
             var paths = new VaultPaths(root);
             await using var repository = new EncryptedVaultStore(paths);
-            await repository.OpenAsync(key, create: true);
+            await repository.OpenAsync(key, create: true, TestContext.Current.CancellationToken);
             var account = new VaultAccount { Username = "edit-user", Region = "EUW" };
             account.Champions.Add(new(1, "Annie"));
             using (var password = new SensitiveBuffer("retained-secret"u8.ToArray()))
             {
-                await repository.SaveAccountAsync(new(account, password));
+                await repository.SaveAccountAsync(new(account, password), TestContext.Current.CancellationToken);
             }
 
             account.Champions.Clear();
             account.Champions.Add(new(2, "Olaf"));
-            await repository.SaveAccountAsync(new(account, null));
+            await repository.SaveAccountAsync(new(account, null), TestContext.Current.CancellationToken);
 
-            VaultAccount loaded = Assert.Single(await repository.GetAccountsAsync());
+            VaultAccount loaded = Assert.Single(await repository.GetAccountsAsync(TestContext.Current.CancellationToken));
             Assert.Equal("Olaf", Assert.Single(loaded.Champions).Name);
-            using SensitiveBuffer? retainedPassword = await repository.GetPasswordAsync(account.Id);
+            using SensitiveBuffer? retainedPassword = await repository.GetPasswordAsync(account.Id, TestContext.Current.CancellationToken);
             Assert.NotNull(retainedPassword);
             Assert.Equal("retained-secret", Encoding.UTF8.GetString(retainedPassword.Memory.Span));
 
-            await repository.DeleteAccountAsync(account.Id);
-            Assert.Empty(await repository.GetAccountsAsync());
-            Assert.Null(await repository.GetPasswordAsync(account.Id));
+            await repository.DeleteAccountAsync(account.Id, TestContext.Current.CancellationToken);
+            Assert.Empty(await repository.GetAccountsAsync(TestContext.Current.CancellationToken));
+            Assert.Null(await repository.GetPasswordAsync(account.Id, TestContext.Current.CancellationToken));
         }
         finally
         {
@@ -459,8 +459,8 @@ public sealed class SecurityAndStorageTests
         {
             await using (var initial = new EncryptedVaultStore(paths))
             {
-                await initial.OpenAsync(key, create: true);
-                await initial.CloseAsync();
+                await initial.OpenAsync(key, create: true, TestContext.Current.CancellationToken);
+                await initial.CloseAsync(TestContext.Current.CancellationToken);
             }
 
             string normalizedPath = Path.GetFullPath(paths.DatabasePath).Replace('\\', '/');
@@ -472,21 +472,21 @@ public sealed class SecurityAndStorageTests
             }.ToString();
             await using (var connection = new SqliteConnection(connectionString))
             {
-                await connection.OpenAsync();
+                await connection.OpenAsync(TestContext.Current.CancellationToken);
                 await using SqliteCommand command = connection.CreateCommand();
                 command.CommandText = "DROP TABLE \"__EFMigrationsHistory\"; CREATE TABLE schema_info(version INTEGER NOT NULL); INSERT INTO schema_info(version) VALUES(3);";
-                await command.ExecuteNonQueryAsync();
+                await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
             }
 
             await using var unsupported = new EncryptedVaultStore(paths);
-            UnsupportedVaultException exception = await Assert.ThrowsAsync<UnsupportedVaultException>(() => unsupported.OpenAsync(key, create: false));
+            UnsupportedVaultException exception = await Assert.ThrowsAsync<UnsupportedVaultException>(() => unsupported.OpenAsync(key, create: false, TestContext.Current.CancellationToken));
             Assert.Contains("version 3", exception.Message, StringComparison.Ordinal);
 
             await using var verification = new SqliteConnection(connectionString);
-            await verification.OpenAsync();
+            await verification.OpenAsync(TestContext.Current.CancellationToken);
             await using SqliteCommand verificationCommand = verification.CreateCommand();
             verificationCommand.CommandText = "SELECT version FROM schema_info";
-            Assert.Equal(3L, await verificationCommand.ExecuteScalarAsync());
+            Assert.Equal(3L, await verificationCommand.ExecuteScalarAsync(TestContext.Current.CancellationToken));
         }
         finally
         {
@@ -511,10 +511,10 @@ public sealed class SecurityAndStorageTests
         {
             await using (var initial = new EncryptedVaultStore(paths))
             {
-                await initial.OpenAsync(key, create: true);
+                await initial.OpenAsync(key, create: true, TestContext.Current.CancellationToken);
                 using var initialPassword = new SensitiveBuffer("public-secret"u8.ToArray());
-                await initial.SaveAccountAsync(new(account, initialPassword));
-                await initial.CloseAsync();
+                await initial.SaveAccountAsync(new(account, initialPassword), TestContext.Current.CancellationToken);
+                await initial.CloseAsync(TestContext.Current.CancellationToken);
             }
 
             string normalizedPath = Path.GetFullPath(paths.DatabasePath).Replace('\\', '/');
@@ -526,34 +526,34 @@ public sealed class SecurityAndStorageTests
             }.ToString();
             await using (var connection = new SqliteConnection(connectionString))
             {
-                await connection.OpenAsync();
+                await connection.OpenAsync(TestContext.Current.CancellationToken);
                 await using SqliteCommand command = connection.CreateCommand();
                 command.CommandText = "DROP TABLE \"__EFMigrationsHistory\"; CREATE TABLE schema_info(version INTEGER NOT NULL); INSERT INTO schema_info(version) VALUES(4);";
-                await command.ExecuteNonQueryAsync();
+                await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
             }
 
             await using var adopted = new EncryptedVaultStore(paths);
-            await adopted.OpenAsync(key, create: false);
-            VaultAccount loaded = Assert.Single(await adopted.GetAccountsAsync());
+            await adopted.OpenAsync(key, create: false, TestContext.Current.CancellationToken);
+            VaultAccount loaded = Assert.Single(await adopted.GetAccountsAsync(TestContext.Current.CancellationToken));
             Assert.Equal("public-v4-user", loaded.Username);
             Assert.Equal(42, loaded.RiotPoints);
             Assert.Equal("Annie", Assert.Single(loaded.Champions).Name);
 
-            using SensitiveBuffer? password = await adopted.GetPasswordAsync(loaded.Id);
+            using SensitiveBuffer? password = await adopted.GetPasswordAsync(loaded.Id, TestContext.Current.CancellationToken);
             Assert.NotNull(password);
             Assert.Equal("public-secret", Encoding.UTF8.GetString(password.Memory.Span));
-            await adopted.CloseAsync();
+            await adopted.CloseAsync(TestContext.Current.CancellationToken);
 
             await using var verification = new SqliteConnection(connectionString);
-            await verification.OpenAsync();
+            await verification.OpenAsync(TestContext.Current.CancellationToken);
             await using SqliteCommand verificationCommand = verification.CreateCommand();
             verificationCommand.CommandText = "SELECT COUNT(*) FROM \"__EFMigrationsHistory\" WHERE \"MigrationId\"=$migration; SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='schema_info';";
             verificationCommand.Parameters.AddWithValue("$migration", EncryptedVaultStore.BaselineMigrationId);
-            await using SqliteDataReader reader = await verificationCommand.ExecuteReaderAsync();
-            Assert.True(await reader.ReadAsync());
+            await using SqliteDataReader reader = await verificationCommand.ExecuteReaderAsync(TestContext.Current.CancellationToken);
+            Assert.True(await reader.ReadAsync(TestContext.Current.CancellationToken));
             Assert.Equal(1L, reader.GetInt64(0));
-            Assert.True(await reader.NextResultAsync());
-            Assert.True(await reader.ReadAsync());
+            Assert.True(await reader.NextResultAsync(TestContext.Current.CancellationToken));
+            Assert.True(await reader.ReadAsync(TestContext.Current.CancellationToken));
             Assert.Equal(0L, reader.GetInt64(0));
         }
         finally
@@ -575,26 +575,26 @@ public sealed class SecurityAndStorageTests
         try
         {
             var sourcePaths = new VaultPaths(sourceRoot); await using var sourceRepository = new EncryptedVaultStore(sourcePaths); await using var sourceSession = new VaultSession(sourcePaths, sourceRepository);
-            await sourceSession.CreateAsync("source password"u8.ToArray());
+            await sourceSession.CreateAsync("source password"u8.ToArray(), TestContext.Current.CancellationToken);
             var account = new VaultAccount { Username = "backup-user", Region = "NA1", LastMatchPlayedAtUtc = new(2026, 8, 4, 12, 0, 0, TimeSpan.Zero), LastMatchId = 999, MatchHistoryState = MatchHistoryState.Stale, RiotPoints = 500, BlueEssence = 25000 };
             using (var password = new SensitiveBuffer("backup-secret"u8.ToArray()))
             {
-                await sourceRepository.SaveAccountAsync(new(account, password));
+                await sourceRepository.SaveAccountAsync(new(account, password), TestContext.Current.CancellationToken);
             }
-            await new VaultBackupService(sourcePaths, sourceSession, sourceSession, sourceRepository).ExportAsync(archive);
+            await new VaultBackupService(sourcePaths, sourceSession, sourceSession, sourceRepository).ExportAsync(archive, TestContext.Current.CancellationToken);
 
             var targetPaths = new VaultPaths(targetRoot); await using var targetRepository = new EncryptedVaultStore(targetPaths); await using var targetSession = new VaultSession(targetPaths, targetRepository);
-            await targetSession.CreateAsync("target password"u8.ToArray());
+            await targetSession.CreateAsync("target password"u8.ToArray(), TestContext.Current.CancellationToken);
             var targetBackup = new VaultBackupService(targetPaths, targetSession, targetSession, targetRepository);
-            await using (BackupImportPreview preview = await targetBackup.PreviewImportAsync(archive, "source password"u8.ToArray()))
+            await using (BackupImportPreview preview = await targetBackup.PreviewImportAsync(archive, "source password"u8.ToArray(), TestContext.Current.CancellationToken))
             {
-                await targetBackup.ImportAsync(preview, new Dictionary<Guid, BackupConflictChoice>());
+                await targetBackup.ImportAsync(preview, new Dictionary<Guid, BackupConflictChoice>(), TestContext.Current.CancellationToken);
             }
 
-            VaultAccount imported = Assert.Single(await targetRepository.GetAccountsAsync());
+            VaultAccount imported = Assert.Single(await targetRepository.GetAccountsAsync(TestContext.Current.CancellationToken));
             Assert.Equal(account.LastMatchPlayedAtUtc, imported.LastMatchPlayedAtUtc); Assert.Equal(999, imported.LastMatchId); Assert.Equal(MatchHistoryState.Stale, imported.MatchHistoryState);
             Assert.Equal(500, imported.RiotPoints); Assert.Equal(25000, imported.BlueEssence);
-            using SensitiveBuffer? importedPassword = await targetRepository.GetPasswordAsync(imported.Id);
+            using SensitiveBuffer? importedPassword = await targetRepository.GetPasswordAsync(imported.Id, TestContext.Current.CancellationToken);
             Assert.NotNull(importedPassword);
             Assert.Equal("backup-secret", Encoding.UTF8.GetString(importedPassword.Memory.Span));
         }

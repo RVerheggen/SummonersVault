@@ -24,9 +24,9 @@ public sealed class UpdateTests
         try
         {
             var paths = new VaultPaths(root);
-            await File.WriteAllTextAsync(paths.SettingsPath, "{\"AutoLockMinutes\":30,\"LockOnSessionLockOrSleep\":true}");
+            await File.WriteAllTextAsync(paths.SettingsPath, "{\"AutoLockMinutes\":30,\"LockOnSessionLockOrSleep\":true}", TestContext.Current.CancellationToken);
 
-            AppSettings settings = await new AppSettingsStore(paths).LoadAsync();
+            AppSettings settings = await new AppSettingsStore(paths).LoadAsync(TestContext.Current.CancellationToken);
 
             Assert.Equal(30, settings.AutoLockMinutes);
             Assert.True(settings.AutomaticallyCheckForUpdates);
@@ -66,7 +66,7 @@ public sealed class UpdateTests
         var settings = new AppSettings { AutomaticallyCheckForUpdates = false };
         int saves = 0;
 
-        UpdateCheckResult result = await workflow.CheckAsync(settings, manual: true, now, _ => { saves++; return Task.CompletedTask; });
+        UpdateCheckResult result = await workflow.CheckAsync(settings, manual: true, now, _ => { saves++; return Task.CompletedTask; }, TestContext.Current.CancellationToken);
 
         Assert.Equal(UpdateCheckState.UpToDate, result.State);
         Assert.Equal(now, settings.LastUpdateCheckAtUtc);
@@ -86,7 +86,7 @@ public sealed class UpdateTests
         var workflow = new UpdateWorkflow(service);
         var settings = new AppSettings { LastUpdateCheckAtUtc = previous };
 
-        UpdateCheckResult result = await workflow.CheckAsync(settings, manual: true, previous.AddDays(2), _ => throw new InvalidOperationException("Should not save"));
+        UpdateCheckResult result = await workflow.CheckAsync(settings, manual: true, previous.AddDays(2), _ => throw new InvalidOperationException("Should not save"), TestContext.Current.CancellationToken);
 
         Assert.Equal(UpdateCheckState.Failed, result.State);
         Assert.Equal(previous, settings.LastUpdateCheckAtUtc);
@@ -100,7 +100,7 @@ public sealed class UpdateTests
         var workflow = new UpdateWorkflow(service);
         var settings = new AppSettings { LastUpdateCheckAtUtc = now.AddMinutes(-10) };
 
-        UpdateCheckResult result = await workflow.CheckAsync(settings, manual: false, now, _ => Task.CompletedTask);
+        UpdateCheckResult result = await workflow.CheckAsync(settings, manual: false, now, _ => Task.CompletedTask, TestContext.Current.CancellationToken);
 
         Assert.Equal(UpdateCheckState.Unavailable, result.State);
         Assert.Equal(0, service.CheckCount);
@@ -118,7 +118,7 @@ public sealed class UpdateTests
         };
         var settings = new AppSettings();
 
-        UpdateCheckResult result = await new UpdateWorkflow(service).CheckAsync(settings, manual: false, now, _ => Task.CompletedTask);
+        UpdateCheckResult result = await new UpdateWorkflow(service).CheckAsync(settings, manual: false, now, _ => Task.CompletedTask, TestContext.Current.CancellationToken);
 
         Assert.Same(available, result.Update);
         Assert.Equal(now, settings.LastUpdateCheckAtUtc);
