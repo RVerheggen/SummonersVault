@@ -1,10 +1,9 @@
-# SummonersVault 1.1.1
+# SummonersVault 1.2.0
 
-This update refines the account details window and makes better use of the available space.
+This update adds quick access to detailed League statistics for your synchronized accounts.
 
-- Browse skins, ranked queues, and crafting items in responsive layouts that adapt to the window width.
-- See up to four champion, skin, or ranked cards per row on wider windows.
-- Browse crafting items in a comfortable two or three-column layout with more room for item names and values.
-- Enjoy cleaner scrolling without unwanted sideways overflow or bright scrollbar corners.
-- See currency balances and account form values aligned more consistently within their controls.
-- Benefit from small layout and presentation improvements throughout the account details experience.
+- Open a synchronized account directly on DeepLoL, DPM.LOL, LeagueOfGraphs, or OP.GG from the new View stats menu.
+- Choose which statistics sites appear, or disable external profile links completely, from Settings.
+- Use a clean, themed provider menu from anywhere in the account details window.
+- Continue safely when an account has not been synchronized yet, with a clear explanation instead of an unusable link.
+- Keep credentials and private vault data inside SummonersVault. Only the public Riot ID and region are included in links you explicitly open.
