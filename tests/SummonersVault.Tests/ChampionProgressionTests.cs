@@ -95,15 +95,57 @@ public sealed class ChampionProgressionTests
     }
 
     [Theory]
-    [InlineData(800, 2)]
-    [InlineData(1000, 3)]
-    [InlineData(1400, 4)]
-    public void ChampionGallery_UsesAdaptiveColumnCount(double width, int expectedColumns)
+    [InlineData(800, 2, 2)]
+    [InlineData(1000, 3, 3)]
+    [InlineData(1400, 4, 3)]
+    public void AccountDetailGalleries_UseAdaptiveColumnCount(double width, int expectedColumns, int expectedCraftingColumns)
     {
-        using var viewModel = new AccountDetailsViewModel(new VaultAccount(), new NullArtworkService(), new AppSettings());
-        viewModel.UpdateChampionViewport(width);
-        Assert.Equal(expectedColumns, viewModel.ChampionColumnCount);
+        var account = new VaultAccount();
+        account.Champions.AddRange([
+            new(1, "Champion One"),
+            new(2, "Champion Two"),
+            new(3, "Champion Three"),
+            new(4, "Champion Four"),
+            new(5, "Champion Five")
+        ]);
+        account.Skins.AddRange([
+            new(1001, 1, "Skin One"),
+            new(1002, 2, "Skin Two"),
+            new(1003, 3, "Skin Three"),
+            new(1004, 4, "Skin Four"),
+            new(1005, 5, "Skin Five")
+        ]);
+        account.Ranks.AddRange([
+            new("QUEUE_ONE", "GOLD", "IV", 1, 1, 1),
+            new("QUEUE_TWO", "GOLD", "IV", 2, 2, 2),
+            new("QUEUE_THREE", "GOLD", "IV", 3, 3, 3),
+            new("QUEUE_FOUR", "GOLD", "IV", 4, 4, 4),
+            new("QUEUE_FIVE", "GOLD", "IV", 5, 5, 5)
+        ]);
+        account.LootItems.AddRange([
+            CreateLootItem("loot-one", "Loot One"),
+            CreateLootItem("loot-two", "Loot Two"),
+            CreateLootItem("loot-three", "Loot Three"),
+            CreateLootItem("loot-four", "Loot Four"),
+            CreateLootItem("loot-five", "Loot Five")
+        ]);
+        using var viewModel = new AccountDetailsViewModel(account, new NullArtworkService(), new AppSettings());
+        viewModel.UpdateGalleryViewport(width);
+
+        Assert.Equal(expectedColumns, viewModel.GalleryColumnCount);
+        Assert.Equal(expectedCraftingColumns, viewModel.CraftingColumnCount);
+        Assert.Equal(expectedColumns, viewModel.ChampionRows[0].Items.Count);
+        Assert.Equal((int)Math.Ceiling(5d / expectedColumns), viewModel.ChampionRows.Count);
+        Assert.Equal(expectedColumns, viewModel.SkinRows[0].Items.Count);
+        Assert.Equal((int)Math.Ceiling(5d / expectedColumns), viewModel.SkinRows.Count);
+        Assert.Equal(expectedColumns, viewModel.RankRows[0].Items.Count);
+        Assert.Equal((int)Math.Ceiling(5d / expectedColumns), viewModel.RankRows.Count);
+        Assert.Equal(expectedCraftingColumns, viewModel.LootRows[0].Items.Count);
+        Assert.Equal((int)Math.Ceiling(5d / expectedCraftingColumns), viewModel.LootRows.Count);
     }
+
+    private static CraftingLootItem CreateLootItem(string lootId, string name) =>
+        new(lootId, name, "MATERIAL", "Materials", name, null, 1, null, null, null, null, null, null, null, null);
 
     private sealed class NullArtworkService : IArtworkService
     {

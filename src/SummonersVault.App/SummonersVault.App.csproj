@@ -3,6 +3,7 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows10.0.22000.0</TargetFramework>
     <UseWPF>true</UseWPF>
+    <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
     <StartupObject>SummonersVault.App.App</StartupObject>
     <Platforms>x64</Platforms>
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
@@ -25,10 +26,6 @@
     <PackageReference Include="MahApps.Metro.IconPacks.FontAwesome" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Velopack" />
-  </ItemGroup>
-  <ItemGroup>
-    <ApplicationDefinition Remove="App.xaml" />
-    <Page Include="App.xaml" />
   </ItemGroup>
   <ItemGroup>
     <Resource Include="Assets\AppIcon.ico" />

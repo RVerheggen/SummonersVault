@@ -3,6 +3,7 @@
     <Color x:Key="SurfaceColor">#11151D</Color><SolidColorBrush x:Key="SurfaceBrush" Color="{StaticResource SurfaceColor}"/>
     <Color x:Key="SurfaceRaisedColor">#121720</Color><SolidColorBrush x:Key="SurfaceRaisedBrush" Color="{StaticResource SurfaceRaisedColor}"/>
     <Color x:Key="SurfaceMutedColor">#0D1016</Color><SolidColorBrush x:Key="SurfaceMutedBrush" Color="{StaticResource SurfaceMutedColor}"/>
+    <SolidColorBrush x:Key="{x:Static SystemColors.ControlBrushKey}" Color="{StaticResource SurfaceMutedColor}"/>
     <SolidColorBrush x:Key="BorderBrush" Color="#313746"/><SolidColorBrush x:Key="BorderSubtleBrush" Color="#242A35"/><SolidColorBrush x:Key="BorderHighlightBrush" Color="#687183"/><SolidColorBrush x:Key="InputBorderBrush" Color="#8F7440"/>
     <SolidColorBrush x:Key="ForegroundBrush" Color="#F5F2EA"/><SolidColorBrush x:Key="MutedForegroundBrush" Color="#AAB3C2"/><SolidColorBrush x:Key="DisabledForegroundBrush" Color="#6F7785"/>
     <SolidColorBrush x:Key="PrimaryBrush" Color="#B88A3D"/><SolidColorBrush x:Key="PrimaryHoverBrush" Color="#C99B4D"/><SolidColorBrush x:Key="HighlightBrush" Color="#D0A54F"/>

@@ -22,7 +22,7 @@ public partial class AccountDetailsWindow : Window
         _galleryResizeTimer.Tick += GalleryResizeTimer_Tick;
         SizeChanged += AccountDetailsWindow_SizeChanged;
         DataContext = _details = new(account, artwork, main.Settings);
-        Loaded += (_, _) => _details.UpdateChampionViewport(ActualWidth - 80);
+        Loaded += (_, _) => _details.UpdateGalleryViewport(ActualWidth - 80);
         _main.PropertyChanged += MainPropertyChanged;
         _main.ChampionProgressionUpdated += ChampionProgressionUpdated;
         _main.ChampionProgressionSynchronizationFinished += ChampionProgressionSynchronizationFinished;
@@ -46,7 +46,7 @@ public partial class AccountDetailsWindow : Window
     private void GalleryResizeTimer_Tick(object? sender, EventArgs e)
     {
         _galleryResizeTimer.Stop();
-        _details.UpdateChampionViewport(ActualWidth - 80);
+        _details.UpdateGalleryViewport(ActualWidth - 80);
     }
 
     private async void CopyUsername_Click(object sender, RoutedEventArgs e) => await _main.CopyLoginAsync(_details.Id);
@@ -99,7 +99,8 @@ public partial class AccountDetailsWindow : Window
         string championCollection = _details.ChampionCollection;
         string championSort = _details.ChampionSort;
         string championSortDirection = _details.ChampionSortDirection;
-        int championColumnCount = _details.ChampionColumnCount;
+        int galleryColumnCount = _details.GalleryColumnCount;
+        int craftingColumnCount = _details.CraftingColumnCount;
         VaultAccount? account = await _main.GetAccountAsync(accountId);
         if (account is null)
         {
@@ -113,7 +114,8 @@ public partial class AccountDetailsWindow : Window
             ChampionCollection = championCollection,
             ChampionSort = championSort,
             ChampionSortDirection = championSortDirection,
-            ChampionColumnCount = championColumnCount,
+            GalleryColumnCount = galleryColumnCount,
+            CraftingColumnCount = craftingColumnCount,
             SynchronizationStatus = _main.IsChampionProgressionSynchronizing(accountId)
                 ? "Synchronizing champion mastery and Eternals..."
                 : string.Empty

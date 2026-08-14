@@ -24,7 +24,10 @@ public sealed partial class AccountDetailsViewModel : ObservableObject, IDisposa
     public partial string ChampionSortDirection { get; set; } = "Ascending";
 
     [ObservableProperty]
-    public partial int ChampionColumnCount { get; set; } = 3;
+    public partial int GalleryColumnCount { get; set; } = 3;
+
+    [ObservableProperty]
+    public partial int CraftingColumnCount { get; set; } = 3;
 
     [ObservableProperty]
     public partial ChampionGalleryItem? SelectedChampion { get; set; }
@@ -50,7 +53,7 @@ public sealed partial class AccountDetailsViewModel : ObservableObject, IDisposa
         ChampionCollections = BuildChampionCollections();
         ChampionSortOptions = ["Name", "Mastery level", "Mastery points"];
         ChampionSortDirections = ["Ascending", "Descending"];
-        Pair(Ranks, RankRows);
+        BuildRankRows();
         ApplyFilters();
     }
 
@@ -83,9 +86,9 @@ public sealed partial class AccountDetailsViewModel : ObservableObject, IDisposa
     public ObservableCollection<SkinGalleryItem> Skins { get; } = [];
     public ObservableCollection<CraftingGalleryItem> Loot { get; } = [];
     public ObservableCollection<GalleryRow<ChampionGalleryItem>> ChampionRows { get; } = [];
-    public ObservableCollection<GalleryPair<SkinGalleryItem>> SkinRows { get; } = [];
-    public ObservableCollection<GalleryPair<CraftingGalleryItem>> LootRows { get; } = [];
-    public ObservableCollection<GalleryPair<RankCardItem>> RankRows { get; } = [];
+    public ObservableCollection<GalleryRow<SkinGalleryItem>> SkinRows { get; } = [];
+    public ObservableCollection<GalleryRow<CraftingGalleryItem>> LootRows { get; } = [];
+    public ObservableCollection<GalleryRow<RankCardItem>> RankRows { get; } = [];
     public IReadOnlyList<RankCardItem> Ranks => [.. _account.Ranks.OrderBy(RankOrder).ThenBy(x => x.QueueType).Select(x => new RankCardItem(x))];
     public string ChampionCount => $"{Champions.Count} shown";
     public string SkinCount => $"{Skins.Count} shown";
@@ -95,7 +98,13 @@ public sealed partial class AccountDetailsViewModel : ObservableObject, IDisposa
     partial void OnChampionCollectionChanged(string value) => ApplyChampionFilter();
     partial void OnChampionSortChanged(string value) => ApplyChampionFilter();
     partial void OnChampionSortDirectionChanged(string value) => ApplyChampionFilter();
-    partial void OnChampionColumnCountChanged(int value) => BuildChampionRows();
+    partial void OnGalleryColumnCountChanged(int value)
+    {
+        BuildChampionRows();
+        BuildSkinRows();
+        BuildRankRows();
+    }
+    partial void OnCraftingColumnCountChanged(int value) => BuildLootRows();
     partial void OnSelectedChampionChanged(ChampionGalleryItem? value)
     {
         OnPropertyChanged(nameof(IsChampionGalleryVisible));
@@ -129,17 +138,18 @@ public sealed partial class AccountDetailsViewModel : ObservableObject, IDisposa
             Loot.Add(item);
         }
 
-        Pair(Skins, SkinRows); Pair(Loot, LootRows);
+        BuildSkinRows();
+        BuildLootRows();
         OnPropertyChanged(nameof(SkinCount)); OnPropertyChanged(nameof(LootCount));
     }
 
     public void SelectChampion(ChampionGalleryItem champion) => SelectedChampion = champion;
     public void ShowChampionGallery() => SelectedChampion = null;
 
-    public void UpdateChampionViewport(double availableWidth)
+    public void UpdateGalleryViewport(double availableWidth)
     {
-        int columns = availableWidth >= 1250 ? 4 : availableWidth >= 900 ? 3 : 2;
-        ChampionColumnCount = columns;
+        GalleryColumnCount = availableWidth >= 1250 ? 4 : availableWidth >= 900 ? 3 : 2;
+        CraftingColumnCount = availableWidth >= 900 ? 3 : 2;
     }
 
     private void ApplyChampionFilter()
@@ -185,12 +195,20 @@ public sealed partial class AccountDetailsViewModel : ObservableObject, IDisposa
         OnPropertyChanged(nameof(ChampionCount));
     }
 
-    private void BuildChampionRows()
+    private void BuildChampionRows() => BuildRows(Champions, ChampionRows, GalleryColumnCount);
+
+    private void BuildSkinRows() => BuildRows(Skins, SkinRows, GalleryColumnCount);
+
+    private void BuildRankRows() => BuildRows(Ranks, RankRows, GalleryColumnCount);
+
+    private void BuildLootRows() => BuildRows(Loot, LootRows, CraftingColumnCount);
+
+    private static void BuildRows<T>(IReadOnlyList<T> source, ObservableCollection<GalleryRow<T>> target, int columnCount) where T : class
     {
-        ChampionRows.Clear();
-        for (int index = 0; index < Champions.Count; index += ChampionColumnCount)
+        target.Clear();
+        for (int index = 0; index < source.Count; index += columnCount)
         {
-            ChampionRows.Add(new([.. Champions.Skip(index).Take(ChampionColumnCount)]));
+            target.Add(new([.. source.Skip(index).Take(columnCount)]));
         }
     }
 
@@ -206,14 +224,6 @@ public sealed partial class AccountDetailsViewModel : ObservableObject, IDisposa
     }
 
     private static bool Contains(string? value, string query) => string.IsNullOrWhiteSpace(query) || value?.Contains(query.Trim(), StringComparison.CurrentCultureIgnoreCase) == true;
-    private static void Pair<T>(IReadOnlyList<T> source, ObservableCollection<GalleryPair<T>> target) where T : class
-    {
-        target.Clear();
-        for (int index = 0; index < source.Count; index += 2)
-        {
-            target.Add(new(source[index], index + 1 < source.Count ? source[index + 1] : null));
-        }
-    }
     private static int RankOrder(RankSnapshot rank) => rank.QueueType switch { "RANKED_SOLO_5x5" => 0, "RANKED_FLEX_SR" => 1, _ => 2 };
     private CraftingGalleryItem CreateCraftingItem(CraftingLootItem item)
     {
@@ -286,7 +296,6 @@ public sealed partial class AccountDetailsViewModel : ObservableObject, IDisposa
     public void Dispose() { _debounce?.Cancel(); _debounce?.Dispose(); Champions.Clear(); Skins.Clear(); Loot.Clear(); ChampionRows.Clear(); SkinRows.Clear(); LootRows.Clear(); RankRows.Clear(); }
 }
 
-public sealed record GalleryPair<T>(T First, T? Second) where T : class;
 public sealed record GalleryRow<T>(IReadOnlyList<T> Items) where T : class;
 
 public sealed record ChampionGalleryItem(

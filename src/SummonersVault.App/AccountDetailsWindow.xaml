@@ -26,11 +26,11 @@
               <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="Focusable" Value="True"/><Setter Property="IsTabStop" Value="True"/><Setter Property="Padding" Value="14,8"/><Setter Property="Margin" Value="0,0,8,0"/><Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Background" Value="{StaticResource SurfaceMutedBrush}"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem"><Border x:Name="Segment" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10" Padding="{TemplateBinding Padding}"><ContentPresenter/></Border><ControlTemplate.Triggers><Trigger Property="IsSelected" Value="True"><Setter TargetName="Segment" Property="BorderBrush" Value="{StaticResource HighlightBrush}"/><Setter TargetName="Segment" Property="BorderThickness" Value="2"/><Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/></Trigger><Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Segment" Property="BorderBrush" Value="{StaticResource HighlightBrush}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style></ListBox.ItemContainerStyle>
             </ListBox>
             <Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="170"/><ColumnDefinition Width="145"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox Text="{Binding ChampionQuery, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Search champions"/><ComboBox Grid.Column="1" ItemsSource="{Binding ChampionSortOptions}" SelectedItem="{Binding ChampionSort}" Margin="10,0,0,0" AutomationProperties.Name="Sort champions by"/><ComboBox Grid.Column="2" ItemsSource="{Binding ChampionSortDirections}" SelectedItem="{Binding ChampionSortDirection}" Margin="10,0,0,0" AutomationProperties.Name="Champion sort direction"/><TextBlock Grid.Column="3" Text="{Binding ChampionCount}" Style="{StaticResource MutedText}" Margin="14,0,0,0" VerticalAlignment="Center"/></Grid>
-            <ListBox Grid.Row="4" ItemsSource="{Binding ChampionRows}" Background="{StaticResource TransparentBrush}" BorderThickness="0" ScrollViewer.CanContentScroll="True" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
+            <ListBox Grid.Row="4" ItemsSource="{Binding ChampionRows}" Background="{StaticResource TransparentBrush}" BorderThickness="0" HorizontalContentAlignment="Stretch" ScrollViewer.CanContentScroll="True" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
               <ListBox.ItemTemplate>
                 <DataTemplate>
                   <ItemsControl ItemsSource="{Binding Items}" Margin="0,0,0,12">
-                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="1" Columns="{Binding DataContext.ChampionColumnCount, RelativeSource={RelativeSource AncestorType=Window}}"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="1" Columns="{Binding DataContext.GalleryColumnCount, RelativeSource={RelativeSource AncestorType=Window}}"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                     <ItemsControl.ItemContainerStyle><Style TargetType="ContentPresenter"><Setter Property="Margin" Value="0,0,12,0"/></Style></ItemsControl.ItemContainerStyle>
                     <ItemsControl.ItemTemplate>
                       <DataTemplate>
@@ -86,9 +86,108 @@
           </ScrollViewer>
         </Grid>
       </TabItem>
-      <TabItem Header="Skins"><Grid Margin="20"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition/></Grid.RowDefinitions><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox Text="{Binding SkinQuery, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Search skins and champions"/><TextBlock Grid.Column="1" Text="{Binding SkinCount}" Style="{StaticResource MutedText}" Margin="14,0,0,0" VerticalAlignment="Center"/></Grid><ListBox Grid.Row="2" ItemsSource="{Binding SkinRows}" Background="{StaticResource TransparentBrush}" BorderThickness="0" ScrollViewer.CanContentScroll="True" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"><ListBox.ItemTemplate><DataTemplate><Grid Margin="0,0,0,12"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="12"/><ColumnDefinition/></Grid.ColumnDefinitions><Border Style="{StaticResource Panel}" Padding="0" Height="190"><Grid><controls:ArtworkImage AssetPath="{Binding First.Artwork}" ArtworkService="{Binding DataContext.ArtworkService, RelativeSource={RelativeSource AncestorType=Window}}" AllowCommunityDragon="{Binding DataContext.AllowCommunityDragon, RelativeSource={RelativeSource AncestorType=Window}}"/><Border VerticalAlignment="Bottom" Background="{StaticResource SurfaceBrush}" Padding="14,8"><StackPanel><TextBlock Text="{Binding First.Name}" FontWeight="SemiBold"/><TextBlock Text="{Binding First.Subtitle}" Style="{StaticResource MutedText}"/></StackPanel></Border></Grid></Border><Border Grid.Column="2" Visibility="{Binding Second, Converter={StaticResource NullVisibility}}" Style="{StaticResource Panel}" Padding="0" Height="190"><Grid><controls:ArtworkImage AssetPath="{Binding Second.Artwork}" ArtworkService="{Binding DataContext.ArtworkService, RelativeSource={RelativeSource AncestorType=Window}}" AllowCommunityDragon="{Binding DataContext.AllowCommunityDragon, RelativeSource={RelativeSource AncestorType=Window}}"/><Border VerticalAlignment="Bottom" Background="{StaticResource SurfaceBrush}" Padding="14,8"><StackPanel><TextBlock Text="{Binding Second.Name}" FontWeight="SemiBold"/><TextBlock Text="{Binding Second.Subtitle}" Style="{StaticResource MutedText}"/></StackPanel></Border></Grid></Border></Grid></DataTemplate></ListBox.ItemTemplate></ListBox></Grid></TabItem>
-      <TabItem Header="Ranked"><ListBox ItemsSource="{Binding RankRows}" Margin="20" Background="{StaticResource TransparentBrush}" BorderThickness="0" ScrollViewer.CanContentScroll="True" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"><ListBox.ItemTemplate><DataTemplate><Grid Margin="0,0,0,12"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="12"/><ColumnDefinition/></Grid.ColumnDefinitions><Border Style="{StaticResource Panel}"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="90"/><ColumnDefinition/></Grid.ColumnDefinitions><Image Source="{Binding First.Icon}" Width="72" Height="72" Stretch="Uniform"/><StackPanel Grid.Column="1"><TextBlock Text="{Binding First.Queue}" Foreground="{StaticResource HighlightBrush}" FontWeight="SemiBold"/><TextBlock Text="{Binding First.RankText}" FontSize="22" FontWeight="SemiBold" Margin="0,6,0,0"/><TextBlock Text="{Binding First.Record}" Margin="0,6,0,0"/><TextBlock Text="{Binding First.WinRate}" Style="{StaticResource MutedText}"/><TextBlock Text="{Binding First.Placement}" Foreground="{StaticResource WarningBrush}" Margin="0,5,0,0"/></StackPanel></Grid></Border><Border Grid.Column="2" Visibility="{Binding Second, Converter={StaticResource NullVisibility}}" Style="{StaticResource Panel}"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="90"/><ColumnDefinition/></Grid.ColumnDefinitions><Image Source="{Binding Second.Icon}" Width="72" Height="72" Stretch="Uniform"/><StackPanel Grid.Column="1"><TextBlock Text="{Binding Second.Queue}" Foreground="{StaticResource HighlightBrush}" FontWeight="SemiBold"/><TextBlock Text="{Binding Second.RankText}" FontSize="22" FontWeight="SemiBold" Margin="0,6,0,0"/><TextBlock Text="{Binding Second.Record}" Margin="0,6,0,0"/><TextBlock Text="{Binding Second.WinRate}" Style="{StaticResource MutedText}"/><TextBlock Text="{Binding Second.Placement}" Foreground="{StaticResource WarningBrush}" Margin="0,5,0,0"/></StackPanel></Grid></Border></Grid></DataTemplate></ListBox.ItemTemplate></ListBox></TabItem>
-      <TabItem Header="Crafting"><Grid Margin="20"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition/></Grid.RowDefinitions><StackPanel Orientation="Horizontal" HorizontalAlignment="Right"><Border Style="{StaticResource Panel}" Padding="12,8"><StackPanel Orientation="Horizontal"><Image Source="Assets/Currencies/orange-essence.png" Width="24" Height="24" AutomationProperties.Name="Orange Essence icon"/><TextBlock Text="Orange Essence" Style="{StaticResource MutedText}" Margin="8,2,6,0"/><TextBlock Text="{Binding OrangeEssence}" FontWeight="SemiBold" Margin="0,2,0,0"/></StackPanel></Border><Border Style="{StaticResource Panel}" Padding="12,8" Margin="10,0,0,0"><StackPanel Orientation="Horizontal"><Image Source="Assets/Currencies/mythic-essence.png" Width="24" Height="24" AutomationProperties.Name="Mythic Essence icon"/><TextBlock Text="Mythic Essence" Style="{StaticResource MutedText}" Margin="8,2,6,0"/><TextBlock Text="{Binding MythicEssence}" FontWeight="SemiBold" Margin="0,2,0,0"/></StackPanel></Border></StackPanel><Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="200"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox Text="{Binding LootQuery, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Search crafting inventory"/><ComboBox Grid.Column="1" ItemsSource="{Binding LootCategories}" SelectedItem="{Binding LootCategory}" Margin="10,0,0,0" AutomationProperties.Name="Crafting category"/><TextBlock Grid.Column="2" Text="{Binding LootCount}" Style="{StaticResource MutedText}" Margin="14,0,0,0" VerticalAlignment="Center"/></Grid><ListBox Grid.Row="4" ItemsSource="{Binding LootRows}" Background="{StaticResource TransparentBrush}" BorderThickness="0" ScrollViewer.CanContentScroll="True" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"><ListBox.ItemTemplate><DataTemplate><Grid Margin="0,0,0,12"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="12"/><ColumnDefinition/></Grid.ColumnDefinitions><Border Style="{StaticResource Panel}"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition/></Grid.ColumnDefinitions><controls:ArtworkImage AssetPath="{Binding First.Artwork}" ArtworkService="{Binding DataContext.ArtworkService, RelativeSource={RelativeSource AncestorType=Window}}" AllowCommunityDragon="{Binding DataContext.AllowCommunityDragon, RelativeSource={RelativeSource AncestorType=Window}}" Height="76"/><StackPanel Grid.Column="1" Margin="14,0,0,0"><TextBlock Text="{Binding First.Name}" FontWeight="SemiBold" FontSize="16"/><TextBlock Text="{Binding First.Quantity}" Foreground="{StaticResource HighlightBrush}"/><TextBlock Text="{Binding First.Subtitle}" Style="{StaticResource MutedText}"/><TextBlock Text="{Binding First.Values}" Style="{StaticResource MutedText}"/></StackPanel></Grid></Border><Border Grid.Column="2" Visibility="{Binding Second, Converter={StaticResource NullVisibility}}" Style="{StaticResource Panel}"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition/></Grid.ColumnDefinitions><controls:ArtworkImage AssetPath="{Binding Second.Artwork}" ArtworkService="{Binding DataContext.ArtworkService, RelativeSource={RelativeSource AncestorType=Window}}" AllowCommunityDragon="{Binding DataContext.AllowCommunityDragon, RelativeSource={RelativeSource AncestorType=Window}}" Height="76"/><StackPanel Grid.Column="1" Margin="14,0,0,0"><TextBlock Text="{Binding Second.Name}" FontWeight="SemiBold" FontSize="16"/><TextBlock Text="{Binding Second.Quantity}" Foreground="{StaticResource HighlightBrush}"/><TextBlock Text="{Binding Second.Subtitle}" Style="{StaticResource MutedText}"/><TextBlock Text="{Binding Second.Values}" Style="{StaticResource MutedText}"/></StackPanel></Grid></Border></Grid></DataTemplate></ListBox.ItemTemplate></ListBox></Grid></TabItem>
+      <TabItem Header="Skins">
+        <Grid Margin="20">
+          <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition/></Grid.RowDefinitions>
+          <Grid>
+            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <TextBox Text="{Binding SkinQuery, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Search skins and champions"/>
+            <TextBlock Grid.Column="1" Text="{Binding SkinCount}" Style="{StaticResource MutedText}" Margin="14,0,0,0" VerticalAlignment="Center"/>
+          </Grid>
+          <ListBox Grid.Row="2" ItemsSource="{Binding SkinRows}" Background="{StaticResource TransparentBrush}" BorderThickness="0" HorizontalContentAlignment="Stretch" ScrollViewer.CanContentScroll="True" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
+            <ListBox.ItemTemplate>
+              <DataTemplate>
+                <ItemsControl ItemsSource="{Binding Items}" Margin="0,0,0,12">
+                  <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="1" Columns="{Binding DataContext.GalleryColumnCount, RelativeSource={RelativeSource AncestorType=Window}}"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemContainerStyle><Style TargetType="ContentPresenter"><Setter Property="Margin" Value="0,0,12,0"/></Style></ItemsControl.ItemContainerStyle>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <Border Style="{StaticResource Panel}" Padding="0" Height="190">
+                        <Grid>
+                          <controls:ArtworkImage AssetPath="{Binding Artwork}" ArtworkService="{Binding DataContext.ArtworkService, RelativeSource={RelativeSource AncestorType=Window}}" AllowCommunityDragon="{Binding DataContext.AllowCommunityDragon, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                          <Border VerticalAlignment="Bottom" Background="{StaticResource SurfaceBrush}" Padding="14,8">
+                            <StackPanel><TextBlock Text="{Binding Name}" FontWeight="SemiBold"/><TextBlock Text="{Binding Subtitle}" Style="{StaticResource MutedText}"/></StackPanel>
+                          </Border>
+                        </Grid>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </Grid>
+      </TabItem>
+      <TabItem Header="Ranked">
+        <ListBox ItemsSource="{Binding RankRows}" Margin="20" Background="{StaticResource TransparentBrush}" BorderThickness="0" HorizontalContentAlignment="Stretch" ScrollViewer.CanContentScroll="True" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
+          <ListBox.ItemTemplate>
+            <DataTemplate>
+              <ItemsControl ItemsSource="{Binding Items}" Margin="0,0,0,12">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="1" Columns="{Binding DataContext.GalleryColumnCount, RelativeSource={RelativeSource AncestorType=Window}}"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                <ItemsControl.ItemContainerStyle><Style TargetType="ContentPresenter"><Setter Property="Margin" Value="0,0,12,0"/></Style></ItemsControl.ItemContainerStyle>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Border Style="{StaticResource Panel}">
+                      <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="90"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                        <Image Source="{Binding Icon}" Width="72" Height="72" Stretch="Uniform"/>
+                        <StackPanel Grid.Column="1">
+                          <TextBlock Text="{Binding Queue}" Foreground="{StaticResource HighlightBrush}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                          <TextBlock Text="{Binding RankText}" FontSize="20" FontWeight="SemiBold" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                          <TextBlock Text="{Binding Record}" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                          <TextBlock Text="{Binding WinRate}" Style="{StaticResource MutedText}"/>
+                          <TextBlock Text="{Binding Placement}" Foreground="{StaticResource WarningBrush}" Margin="0,5,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                      </Grid>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </TabItem>
+      <TabItem Header="Crafting">
+        <Grid Margin="20">
+          <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition/></Grid.RowDefinitions>
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Border Style="{StaticResource Panel}" Padding="12,8"><StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Image Source="Assets/Currencies/orange-essence.png" Width="24" Height="24" VerticalAlignment="Center" AutomationProperties.Name="Orange Essence icon"/><TextBlock Text="Orange Essence" Style="{StaticResource MutedText}" Margin="8,0,6,0" VerticalAlignment="Center"/><TextBlock Text="{Binding OrangeEssence}" FontWeight="SemiBold" VerticalAlignment="Center"/></StackPanel></Border>
+            <Border Style="{StaticResource Panel}" Padding="12,8" Margin="10,0,0,0"><StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Image Source="Assets/Currencies/mythic-essence.png" Width="24" Height="24" VerticalAlignment="Center" AutomationProperties.Name="Mythic Essence icon"/><TextBlock Text="Mythic Essence" Style="{StaticResource MutedText}" Margin="8,0,6,0" VerticalAlignment="Center"/><TextBlock Text="{Binding MythicEssence}" FontWeight="SemiBold" VerticalAlignment="Center"/></StackPanel></Border>
+          </StackPanel>
+          <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="200"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <TextBox Text="{Binding LootQuery, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Search crafting inventory"/>
+            <ComboBox Grid.Column="1" ItemsSource="{Binding LootCategories}" SelectedItem="{Binding LootCategory}" Margin="10,0,0,0" AutomationProperties.Name="Crafting category"/>
+            <TextBlock Grid.Column="2" Text="{Binding LootCount}" Style="{StaticResource MutedText}" Margin="14,0,0,0" VerticalAlignment="Center"/>
+          </Grid>
+          <ListBox Grid.Row="4" ItemsSource="{Binding LootRows}" Background="{StaticResource TransparentBrush}" BorderThickness="0" HorizontalContentAlignment="Stretch" ScrollViewer.CanContentScroll="True" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
+            <ListBox.ItemTemplate>
+              <DataTemplate>
+                <ItemsControl ItemsSource="{Binding Items}" Margin="0,0,0,12">
+                  <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="1" Columns="{Binding DataContext.CraftingColumnCount, RelativeSource={RelativeSource AncestorType=Window}}"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemContainerStyle><Style TargetType="ContentPresenter"><Setter Property="Margin" Value="0,0,12,0"/></Style></ItemsControl.ItemContainerStyle>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <Border Style="{StaticResource Panel}">
+                        <Grid>
+                          <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                          <controls:ArtworkImage AssetPath="{Binding Artwork}" ArtworkService="{Binding DataContext.ArtworkService, RelativeSource={RelativeSource AncestorType=Window}}" AllowCommunityDragon="{Binding DataContext.AllowCommunityDragon, RelativeSource={RelativeSource AncestorType=Window}}" Height="76"/>
+                          <StackPanel Grid.Column="1" Margin="14,0,0,0">
+                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="16" TextWrapping="Wrap"/>
+                            <TextBlock Text="{Binding Quantity}" Foreground="{StaticResource HighlightBrush}"/>
+                            <TextBlock Text="{Binding Subtitle}" Style="{StaticResource MutedText}" TextWrapping="Wrap"/>
+                            <TextBlock Text="{Binding Values}" Style="{StaticResource MutedText}" TextWrapping="Wrap"/>
+                          </StackPanel>
+                        </Grid>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </Grid>
+      </TabItem>
     </TabControl>
   </Grid>
 </Window>
