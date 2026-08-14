@@ -57,25 +57,23 @@ public sealed class LeagueClientGateway(LeagueClientConnection connection) : ILe
             }
         }
 
-        IReadOnlyList<RankSnapshot>? ranks = await FetchRanksAsync(client, cancellationToken).ConfigureAwait(false);
-        LeagueWalletSnapshot? wallet = await FetchWalletAsync(client, cancellationToken).ConfigureAwait(false);
-        IReadOnlyList<OwnedChampion>? champions = summonerId.HasValue ? await FetchChampionsAsync(client, summonerId.Value, cancellationToken).ConfigureAwait(false) : null;
-        IReadOnlyList<OwnedSkin>? skins = summonerId.HasValue ? await FetchSkinsAsync(client, summonerId.Value, cancellationToken).ConfigureAwait(false) : null;
-        IReadOnlyList<CraftingLootItem>? craftingLoot = await FetchCraftingLootAsync(client, champions, skins, cancellationToken).ConfigureAwait(false);
-        MatchSnapshotResult match = await FetchLatestMatchAsync(client, puuid, cancellationToken).ConfigureAwait(false);
-        byte[]? icon = null;
-        if (iconId.HasValue)
-        {
-            try
-            {
-                using HttpResponseMessage response = await client.GetAsync($"lol-game-data/assets/v1/profile-icons/{iconId.Value}.jpg", cancellationToken).ConfigureAwait(false);
-                if (response.IsSuccessStatusCode)
-                {
-                    icon = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
-                }
-            }
-            catch (HttpRequestException) { }
-        }
+        Task<IReadOnlyList<RankSnapshot>?> ranksTask = FetchRanksAsync(client, cancellationToken);
+        Task<LeagueWalletSnapshot?> walletTask = FetchWalletAsync(client, cancellationToken);
+        Task<IReadOnlyList<OwnedChampion>?> championsTask = summonerId.HasValue
+            ? FetchChampionsAsync(client, summonerId.Value, cancellationToken)
+            : Task.FromResult<IReadOnlyList<OwnedChampion>?>(null);
+        Task<IReadOnlyList<OwnedSkin>?> skinsTask = summonerId.HasValue
+            ? FetchSkinsAsync(client, summonerId.Value, cancellationToken)
+            : Task.FromResult<IReadOnlyList<OwnedSkin>?>(null);
+        Task<MatchSnapshotResult> matchTask = FetchLatestMatchAsync(client, puuid, cancellationToken);
+        Task<byte[]?> iconTask = FetchProfileIconAsync(client, iconId, cancellationToken);
+        Task<IReadOnlyList<CraftingLootItem>?> craftingTask = FetchCraftingAfterInventoriesAsync(
+            client,
+            championsTask,
+            skinsTask,
+            cancellationToken);
+
+        await Task.WhenAll(ranksTask, walletTask, championsTask, skinsTask, matchTask, iconTask, craftingTask).ConfigureAwait(false);
 
         return new LeagueSnapshot
         {
@@ -85,14 +83,36 @@ public sealed class LeagueClientGateway(LeagueClientConnection connection) : ILe
             RiotTagLine = tag,
             Region = region,
             ProfileIconId = iconId,
-            ProfileIconBytes = icon,
+            ProfileIconBytes = await iconTask.ConfigureAwait(false),
             SummonerLevel = summonerLevel,
-            Wallet = wallet,
-            Ranks = ranks,
-            Champions = champions,
-            Skins = skins,
-            CraftingLoot = craftingLoot,
-            Match = match
+            Wallet = await walletTask.ConfigureAwait(false),
+            Ranks = await ranksTask.ConfigureAwait(false),
+            Champions = await championsTask.ConfigureAwait(false),
+            Skins = await skinsTask.ConfigureAwait(false),
+            CraftingLoot = await craftingTask.ConfigureAwait(false),
+            Match = await matchTask.ConfigureAwait(false)
+        };
+    }
+
+    public async Task<ChampionProgressionSnapshot> FetchChampionProgressionAsync(CancellationToken cancellationToken = default)
+    {
+        LeagueLockfile lockfile = await connection.FindLockfileAsync(cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("League Client is not running.");
+        using HttpClient client = LeagueClientConnection.CreateAuthenticatedClient(lockfile);
+        using JsonDocument summoner = await GetJsonAsync(client, "lol-summoner/v1/current-summoner", cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("Sign into League Client before synchronizing.");
+        string puuid = GetString(summoner.RootElement, "puuid")
+            ?? throw new InvalidDataException("League Client did not return a PUUID.");
+
+        Task<IReadOnlyList<ChampionMastery>?> masteryTask = FetchChampionMasteriesAsync(client, cancellationToken);
+        Task<ChampionEternalsSnapshot?> eternalsTask = FetchChampionEternalsAsync(client, cancellationToken);
+        await Task.WhenAll(masteryTask, eternalsTask).ConfigureAwait(false);
+
+        return new ChampionProgressionSnapshot
+        {
+            Puuid = puuid,
+            ChampionMasteries = await masteryTask.ConfigureAwait(false),
+            ChampionEternals = await eternalsTask.ConfigureAwait(false)
         };
     }
 
@@ -141,6 +161,39 @@ public sealed class LeagueClientGateway(LeagueClientConnection connection) : ILe
         element.ValueKind == JsonValueKind.Object
             ? new LeagueWalletSnapshot(GetWalletValue(element, "rp"), GetWalletValue(element, "lol_blue_essence", "ip", "blueEssence", "be"))
             : null;
+
+    private static async Task<IReadOnlyList<CraftingLootItem>?> FetchCraftingAfterInventoriesAsync(
+        HttpClient client,
+        Task<IReadOnlyList<OwnedChampion>?> championsTask,
+        Task<IReadOnlyList<OwnedSkin>?> skinsTask,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<OwnedChampion>? champions = await championsTask.ConfigureAwait(false);
+        IReadOnlyList<OwnedSkin>? skins = await skinsTask.ConfigureAwait(false);
+        return await FetchCraftingLootAsync(client, champions, skins, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task<byte[]?> FetchProfileIconAsync(HttpClient client, int? iconId, CancellationToken cancellationToken)
+    {
+        if (!iconId.HasValue)
+        {
+            return null;
+        }
+
+        try
+        {
+            using HttpResponseMessage response = await client.GetAsync(
+                $"lol-game-data/assets/v1/profile-icons/{iconId.Value}.jpg",
+                cancellationToken).ConfigureAwait(false);
+            return response.IsSuccessStatusCode
+                ? await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false)
+                : null;
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+    }
 
     private static async Task<LeagueWalletSnapshot?> FetchWalletAsync(HttpClient client, CancellationToken cancellationToken)
     {
@@ -285,9 +338,229 @@ public sealed class LeagueClientGateway(LeagueClientConnection connection) : ILe
             return null;
         }
 
-        return [.. json.RootElement.EnumerateArray().Where(IsOwned).Select(x => new OwnedChampion(
-            GetInt32(x, "id") ?? 0, GetString(x, "name") ?? "Unknown champion",
-            GetString(x, "baseSplashPath"), GetString(x, "squarePortraitPath"))).Where(x => x.ChampionId > 0)];
+        return ParseOwnedChampions(json.RootElement);
+    }
+
+    internal static IReadOnlyList<OwnedChampion> ParseOwnedChampions(JsonElement element)
+    {
+        if (element.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        return [.. element.EnumerateArray().Where(IsOwned).Select(item =>
+        {
+            int championId = GetInt32(item, "id") ?? 0;
+            string? alias = GetString(item, "alias");
+            return new OwnedChampion(championId, GetString(item, "name") ?? "Unknown champion",
+                GetString(item, "baseSplashPath"), GetString(item, "squarePortraitPath"), alias,
+                ClassifyChampionVariant(championId, alias));
+        }).Where(champion => champion.ChampionId > 0)];
+    }
+
+    internal static ChampionVariant ClassifyChampionVariant(int championId, string? alias)
+    {
+        if (alias?.StartsWith("Jade_", StringComparison.OrdinalIgnoreCase) == true || championId is >= 60000 and <= 60999)
+        {
+            return ChampionVariant.LeagueClassic;
+        }
+
+        return string.IsNullOrWhiteSpace(alias) || !alias.Contains('_', StringComparison.Ordinal)
+            ? ChampionVariant.Current
+            : ChampionVariant.Unknown;
+    }
+
+    private static async Task<IReadOnlyList<ChampionMastery>?> FetchChampionMasteriesAsync(HttpClient client, CancellationToken cancellationToken)
+    {
+        using JsonDocument? json = await TryGetJsonAsync(client, "lol-champion-mastery/v1/local-player/champion-mastery", cancellationToken).ConfigureAwait(false);
+        return json is null ? null : ParseChampionMasteries(json.RootElement);
+    }
+
+    internal static IReadOnlyList<ChampionMastery> ParseChampionMasteries(JsonElement element)
+    {
+        if (element.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        var result = new List<ChampionMastery>();
+        foreach (JsonElement item in element.EnumerateArray())
+        {
+            int championId = GetInt32(item, "championId") ?? 0;
+            if (championId <= 0)
+            {
+                continue;
+            }
+
+            result.Add(new ChampionMastery(
+                championId,
+                GetInt32(item, "championLevel") ?? 0,
+                GetInt64(item, "championPoints") ?? 0,
+                GetInt64(item, "championPointsSinceLastLevel") ?? 0,
+                GetInt64(item, "championPointsUntilNextLevel") ?? 0,
+                GetInt32(item, "championSeasonMilestone") ?? 0,
+                GetString(item, "highestGrade"),
+                ParseEpoch(GetInt64(item, "lastPlayTime")),
+                GetInt32(item, "markRequiredForNextLevel") ?? 0,
+                GetStringArray(item, "milestoneGrades"),
+                GetInt32(item, "tokensEarned") ?? 0));
+        }
+
+        return result;
+    }
+
+    private static async Task<ChampionEternalsSnapshot?> FetchChampionEternalsAsync(HttpClient client, CancellationToken cancellationToken)
+    {
+        using JsonDocument? summaryJson = await TryGetJsonAsync(client, "lol-statstones/v2/player-summary-self", cancellationToken).ConfigureAwait(false);
+        if (summaryJson is null)
+        {
+            return null;
+        }
+
+        IReadOnlyList<ChampionEternalSummary> summaries = ParseEternalSummaries(summaryJson.RootElement);
+        Dictionary<(int ChampionId, string Name), ChampionEternalSet> summarySets = ParseEternalSetSummaries(summaryJson.RootElement)
+            .ToDictionary(set => (set.ChampionId, set.Name), set => set);
+        ChampionEternalSummary[] owned = [.. summaries.Where(summary => summary.StonesOwned > 0)];
+        using var concurrency = new SemaphoreSlim(4, 4);
+        Task<EternalDetailResult>[] requests = [.. owned.Select(async summary =>
+        {
+            await concurrency.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                using JsonDocument? detailJson = await TryGetJsonAsync(client, $"lol-statstones/v2/player-statstones-self/{summary.ChampionId}", cancellationToken).ConfigureAwait(false);
+                if (detailJson is null)
+                {
+                    return EternalDetailResult.Failed(summary.ChampionId);
+                }
+
+                EternalDetailResult parsed = ParseEternalDetails(summary.ChampionId, detailJson.RootElement);
+                return parsed.Sets.Count == 0 && summary.StonesOwned > 0 ? EternalDetailResult.Failed(summary.ChampionId) : parsed;
+            }
+            finally
+            {
+                concurrency.Release();
+            }
+        })];
+        EternalDetailResult[] details = await Task.WhenAll(requests).ConfigureAwait(false);
+        int[] successfulIds = [.. details.Where(detail => detail.Succeeded).Select(detail => detail.ChampionId)];
+        ChampionEternalSet[] mergedSets = [.. details.Where(detail => detail.Succeeded).SelectMany(detail => detail.Sets).Select(set =>
+            summarySets.TryGetValue((set.ChampionId, set.Name), out ChampionEternalSet? summarySet)
+                ? set with
+                {
+                    MilestonesPassed = summarySet.MilestonesPassed,
+                    StonesAvailable = summarySet.StonesAvailable,
+                    StonesIlluminated = summarySet.StonesIlluminated,
+                    StonesOwned = summarySet.StonesOwned
+                }
+                : set)];
+        return new ChampionEternalsSnapshot(
+            summaries,
+            mergedSets,
+            [.. details.Where(detail => detail.Succeeded).SelectMany(detail => detail.Eternals)],
+            successfulIds.ToHashSet(),
+            details.All(detail => detail.Succeeded));
+    }
+
+    internal static IReadOnlyList<ChampionEternalSummary> ParseEternalSummaries(JsonElement element)
+    {
+        JsonElement champions = element.ValueKind == JsonValueKind.Object && element.TryGetProperty("championSummaries", out JsonElement summaries)
+            ? summaries
+            : element;
+        if (champions.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        return [.. champions.EnumerateArray().Select(item => new ChampionEternalSummary(
+            GetInt32(item, "championId") ?? 0,
+            GetInt32(item, "milestonesPassed") ?? 0,
+            GetInt32(item, "stonesAvailable") ?? 0,
+            GetInt32(item, "stonesIlluminated") ?? 0,
+            GetInt32(item, "stonesOwned") ?? 0)).Where(item => item.ChampionId > 0)];
+    }
+
+    internal static IReadOnlyList<ChampionEternalSet> ParseEternalSetSummaries(JsonElement element)
+    {
+        if (element.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        var result = new List<ChampionEternalSet>();
+        foreach (JsonElement champion in element.EnumerateArray())
+        {
+            int championId = GetInt32(champion, "championId") ?? 0;
+            if (championId <= 0 || !champion.TryGetProperty("sets", out JsonElement sets) || sets.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
+
+            result.AddRange(sets.EnumerateArray().Select(set => new ChampionEternalSet(
+                championId,
+                0,
+                GetString(set, "name") ?? "Eternals",
+                GetInt32(set, "milestonesPassed") ?? 0,
+                GetInt32(set, "stonesAvailable") ?? 0,
+                GetInt32(set, "stonesIlluminated") ?? 0,
+                GetInt32(set, "stonesOwned") ?? 0)));
+        }
+
+        return result;
+    }
+
+    internal static EternalDetailResult ParseEternalDetails(int championId, JsonElement element)
+    {
+        if (element.ValueKind != JsonValueKind.Array)
+        {
+            return EternalDetailResult.Failed(championId);
+        }
+
+        var sets = new List<ChampionEternalSet>();
+        var eternals = new List<ChampionEternal>();
+        foreach (JsonElement setElement in element.EnumerateArray())
+        {
+            int setId = GetInt32(setElement, "itemId") ?? GetInt32(setElement, "itemInstanceID") ?? 0;
+            sets.Add(new ChampionEternalSet(championId, setId, GetString(setElement, "name") ?? "Eternals",
+                GetInt32(setElement, "milestonesPassed") ?? 0, GetInt32(setElement, "stonesAvailable") ?? 0,
+                GetInt32(setElement, "stonesIlluminated") ?? 0, GetInt32(setElement, "stonesOwned") ?? 0));
+            if (!setElement.TryGetProperty("statstones", out JsonElement stones) || stones.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
+
+            foreach (JsonElement stone in stones.EnumerateArray())
+            {
+                string? statstoneId = GetScalarString(stone, "statstoneId") ?? GetString(stone, "contentId");
+                if (string.IsNullOrWhiteSpace(statstoneId) || !IsOwnedEternal(stone))
+                {
+                    continue;
+                }
+
+                JsonElement record = stone.TryGetProperty("playerRecord", out JsonElement playerRecord) && playerRecord.ValueKind == JsonValueKind.Object
+                    ? playerRecord
+                    : default;
+                eternals.Add(new ChampionEternal(championId, setId, statstoneId, GetString(stone, "name") ?? "Eternal",
+                    GetString(stone, "description"), GetString(stone, "category"), GetDouble(record, "value") ?? 0,
+                    GetString(stone, "formattedValue"), GetInt32(record, "milestoneLevel") ?? 0,
+                    GetString(stone, "formattedMilestoneLevel"), GetDouble(stone, "nextMilestone"),
+                    GetDouble(record, "personalBest"), GetString(stone, "formattedPersonalBest"),
+                    GetBoolean(stone, "isComplete") ?? false, GetBoolean(stone, "isEpic") ?? false,
+                    GetBoolean(stone, "isFeatured") ?? false, GetBoolean(stone, "isRetired") ?? false,
+                    GetString(stone, "imageUrl")));
+            }
+        }
+
+        return new EternalDetailResult(championId, true, sets, eternals);
+    }
+
+    private static bool IsOwnedEternal(JsonElement stone)
+    {
+        if (stone.TryGetProperty("playerRecord", out JsonElement record) && record.ValueKind == JsonValueKind.Object)
+        {
+            return GetBoolean(record, "entitled") != false;
+        }
+
+        return false;
     }
 
     private static async Task<IReadOnlyList<OwnedSkin>?> FetchSkinsAsync(HttpClient client, long summonerId, CancellationToken cancellationToken)
@@ -501,4 +774,34 @@ public sealed class LeagueClientGateway(LeagueClientConnection connection) : ILe
     private static int? GetInt32(JsonElement element, string property) => element.TryGetProperty(property, out JsonElement value) && value.TryGetInt32(out int result) ? result : null;
     private static long? GetInt64(JsonElement element, string property) => element.TryGetProperty(property, out JsonElement value) && value.TryGetInt64(out long result) ? result : null;
     private static bool? GetBoolean(JsonElement element, string property) => element.TryGetProperty(property, out JsonElement value) && value.ValueKind is JsonValueKind.True or JsonValueKind.False ? value.GetBoolean() : null;
+    private static double? GetDouble(JsonElement element, string property)
+    {
+        if (element.ValueKind != JsonValueKind.Object || !element.TryGetProperty(property, out JsonElement value))
+        {
+            return null;
+        }
+
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out double result))
+        {
+            return result;
+        }
+
+        return value.ValueKind == JsonValueKind.String
+            && double.TryParse(value.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out result)
+                ? result
+                : null;
+    }
+    private static IReadOnlyList<string> GetStringArray(JsonElement element, string property) =>
+        element.TryGetProperty(property, out JsonElement value) && value.ValueKind == JsonValueKind.Array
+            ? [.. value.EnumerateArray().Where(item => item.ValueKind == JsonValueKind.String).Select(item => item.GetString()!).Where(item => !string.IsNullOrWhiteSpace(item))]
+            : [];
+}
+
+internal sealed record EternalDetailResult(
+    int ChampionId,
+    bool Succeeded,
+    IReadOnlyList<ChampionEternalSet> Sets,
+    IReadOnlyList<ChampionEternal> Eternals)
+{
+    public static EternalDetailResult Failed(int championId) => new(championId, false, [], []);
 }

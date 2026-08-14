@@ -11,6 +11,10 @@ internal sealed class VaultDbContext(DbContextOptions<VaultDbContext> options) :
     public DbSet<AccountEntity> Accounts => Set<AccountEntity>();
     public DbSet<RankEntity> Ranks => Set<RankEntity>();
     public DbSet<ChampionEntity> Champions => Set<ChampionEntity>();
+    public DbSet<ChampionMasteryEntity> ChampionMasteries => Set<ChampionMasteryEntity>();
+    public DbSet<EternalSummaryEntity> EternalSummaries => Set<EternalSummaryEntity>();
+    public DbSet<EternalSetEntity> EternalSets => Set<EternalSetEntity>();
+    public DbSet<EternalEntity> Eternals => Set<EternalEntity>();
     public DbSet<SkinEntity> Skins => Set<SkinEntity>();
     public DbSet<LootItemEntity> LootItems => Set<LootItemEntity>();
     public DbSet<SyncCategoryEntity> SyncCategories => Set<SyncCategoryEntity>();
@@ -55,6 +59,7 @@ internal sealed class VaultDbContext(DbContextOptions<VaultDbContext> options) :
 
         ConfigureRank(modelBuilder);
         ConfigureChampion(modelBuilder);
+        ConfigureChampionProgression(modelBuilder, nullableDateTimeOffsetConverter);
         ConfigureSkin(modelBuilder);
         ConfigureLoot(modelBuilder, nullableDateTimeOffsetConverter);
         ConfigureSyncCategory(modelBuilder, nullableDateTimeOffsetConverter);
@@ -89,7 +94,79 @@ internal sealed class VaultDbContext(DbContextOptions<VaultDbContext> options) :
         entity.Property(champion => champion.Name).HasColumnName("name");
         entity.Property(champion => champion.BaseSplashPath).HasColumnName("base_splash_path");
         entity.Property(champion => champion.SquarePortraitPath).HasColumnName("square_portrait_path");
+        entity.Property(champion => champion.Alias).HasColumnName("alias");
+        entity.Property(champion => champion.Variant).HasColumnName("variant");
         entity.HasOne(champion => champion.Account).WithMany(account => account.Champions).HasForeignKey(champion => champion.AccountId).OnDelete(DeleteBehavior.Cascade);
+    }
+
+    private static void ConfigureChampionProgression(ModelBuilder modelBuilder, ValueConverter<DateTimeOffset?, string?> dateConverter)
+    {
+        EntityTypeBuilder<ChampionMasteryEntity> mastery = modelBuilder.Entity<ChampionMasteryEntity>();
+        mastery.ToTable("champion_masteries");
+        mastery.HasKey(item => new { item.AccountId, item.ChampionId });
+        mastery.Property(item => item.AccountId).HasColumnName("account_id").HasConversion<string>();
+        mastery.Property(item => item.ChampionId).HasColumnName("champion_id");
+        mastery.Property(item => item.Level).HasColumnName("level");
+        mastery.Property(item => item.Points).HasColumnName("points");
+        mastery.Property(item => item.PointsSinceLastLevel).HasColumnName("points_since_last_level");
+        mastery.Property(item => item.PointsUntilNextLevel).HasColumnName("points_until_next_level");
+        mastery.Property(item => item.SeasonMilestone).HasColumnName("season_milestone");
+        mastery.Property(item => item.HighestGrade).HasColumnName("highest_grade");
+        mastery.Property(item => item.LastPlayAtUtc).HasColumnName("last_play_at").HasConversion(dateConverter);
+        mastery.Property(item => item.MarksRequiredForNextLevel).HasColumnName("marks_required_for_next_level");
+        mastery.Property(item => item.MilestoneGradesJson).HasColumnName("milestone_grades_json");
+        mastery.Property(item => item.TokensEarned).HasColumnName("tokens_earned");
+        mastery.HasIndex(item => new { item.AccountId, item.Points }).HasDatabaseName("ix_mastery_account_points");
+        mastery.HasOne(item => item.Account).WithMany(account => account.ChampionMasteries).HasForeignKey(item => item.AccountId).OnDelete(DeleteBehavior.Cascade);
+
+        EntityTypeBuilder<EternalSummaryEntity> summary = modelBuilder.Entity<EternalSummaryEntity>();
+        summary.ToTable("champion_eternal_summaries");
+        summary.HasKey(item => new { item.AccountId, item.ChampionId });
+        summary.Property(item => item.AccountId).HasColumnName("account_id").HasConversion<string>();
+        summary.Property(item => item.ChampionId).HasColumnName("champion_id");
+        summary.Property(item => item.MilestonesPassed).HasColumnName("milestones_passed");
+        summary.Property(item => item.StonesAvailable).HasColumnName("stones_available");
+        summary.Property(item => item.StonesIlluminated).HasColumnName("stones_illuminated");
+        summary.Property(item => item.StonesOwned).HasColumnName("stones_owned");
+        summary.HasOne(item => item.Account).WithMany(account => account.EternalSummaries).HasForeignKey(item => item.AccountId).OnDelete(DeleteBehavior.Cascade);
+
+        EntityTypeBuilder<EternalSetEntity> set = modelBuilder.Entity<EternalSetEntity>();
+        set.ToTable("champion_eternal_sets");
+        set.HasKey(item => new { item.AccountId, item.ChampionId, item.SetId });
+        set.Property(item => item.AccountId).HasColumnName("account_id").HasConversion<string>();
+        set.Property(item => item.ChampionId).HasColumnName("champion_id");
+        set.Property(item => item.SetId).HasColumnName("set_id");
+        set.Property(item => item.Name).HasColumnName("name");
+        set.Property(item => item.MilestonesPassed).HasColumnName("milestones_passed");
+        set.Property(item => item.StonesAvailable).HasColumnName("stones_available");
+        set.Property(item => item.StonesIlluminated).HasColumnName("stones_illuminated");
+        set.Property(item => item.StonesOwned).HasColumnName("stones_owned");
+        set.HasOne(item => item.Account).WithMany(account => account.EternalSets).HasForeignKey(item => item.AccountId).OnDelete(DeleteBehavior.Cascade);
+
+        EntityTypeBuilder<EternalEntity> eternal = modelBuilder.Entity<EternalEntity>();
+        eternal.ToTable("champion_eternals");
+        eternal.HasKey(item => new { item.AccountId, item.StatstoneId });
+        eternal.Property(item => item.AccountId).HasColumnName("account_id").HasConversion<string>();
+        eternal.Property(item => item.StatstoneId).HasColumnName("statstone_id");
+        eternal.Property(item => item.ChampionId).HasColumnName("champion_id");
+        eternal.Property(item => item.SetId).HasColumnName("set_id");
+        eternal.Property(item => item.Name).HasColumnName("name");
+        eternal.Property(item => item.Description).HasColumnName("description");
+        eternal.Property(item => item.Category).HasColumnName("category");
+        eternal.Property(item => item.Value).HasColumnName("value");
+        eternal.Property(item => item.FormattedValue).HasColumnName("formatted_value");
+        eternal.Property(item => item.MilestoneLevel).HasColumnName("milestone_level");
+        eternal.Property(item => item.FormattedMilestoneLevel).HasColumnName("formatted_milestone_level");
+        eternal.Property(item => item.NextMilestone).HasColumnName("next_milestone");
+        eternal.Property(item => item.PersonalBest).HasColumnName("personal_best");
+        eternal.Property(item => item.FormattedPersonalBest).HasColumnName("formatted_personal_best");
+        eternal.Property(item => item.IsComplete).HasColumnName("is_complete").HasConversion<int>();
+        eternal.Property(item => item.IsEpic).HasColumnName("is_epic").HasConversion<int>();
+        eternal.Property(item => item.IsFeatured).HasColumnName("is_featured").HasConversion<int>();
+        eternal.Property(item => item.IsRetired).HasColumnName("is_retired").HasConversion<int>();
+        eternal.Property(item => item.ImageAssetPath).HasColumnName("image_asset_path");
+        eternal.HasIndex(item => new { item.AccountId, item.ChampionId }).HasDatabaseName("ix_eternals_account_champion");
+        eternal.HasOne(item => item.Account).WithMany(account => account.Eternals).HasForeignKey(item => item.AccountId).OnDelete(DeleteBehavior.Cascade);
     }
 
     private static void ConfigureSkin(ModelBuilder modelBuilder)

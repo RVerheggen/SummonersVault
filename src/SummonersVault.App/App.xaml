@@ -7,6 +7,7 @@
         <ResourceDictionary>
             <converters:NullToVisibilityConverter x:Key="NullVisibility"/>
             <converters:ByteArrayImageConverter x:Key="ImageConverter"/>
+            <BooleanToVisibilityConverter x:Key="BooleanVisibility"/>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="Themes/Theme.xaml" />
             </ResourceDictionary.MergedDictionaries>

@@ -28,10 +28,14 @@ public sealed class PersistenceQueryTests
 
         Assert.Equal(2, account.Ranks.Count);
         Assert.Equal(2, account.Champions.Count);
+        Assert.Equal(2, account.ChampionMasteries.Count);
+        Assert.Equal(2, account.EternalSummaries.Count);
+        Assert.Equal(2, account.EternalSets.Count);
+        Assert.Equal(2, account.Eternals.Count);
         Assert.Equal(2, account.Skins.Count);
         Assert.Equal(2, account.LootItems.Count);
         Assert.Equal(2, account.SyncCategories.Count);
-        Assert.Equal(6, commandCounter.Count);
+        Assert.Equal(10, commandCounter.Count);
     }
 
     [Fact]
@@ -51,13 +55,17 @@ public sealed class PersistenceQueryTests
         List<AccountEntity> accounts = await readContext.Accounts
             .Include(account => account.Ranks)
             .Include(account => account.Champions)
+            .Include(account => account.ChampionMasteries)
+            .Include(account => account.EternalSummaries)
+            .Include(account => account.EternalSets)
+            .Include(account => account.Eternals)
             .Include(account => account.Skins)
             .Include(account => account.LootItems)
             .Include(account => account.SyncCategories)
             .ToListAsync(timeout.Token);
 
         Assert.Single(accounts);
-        Assert.Equal(6, commandCounter.Count);
+        Assert.Equal(10, commandCounter.Count);
     }
 
     private static async Task SeedAccountGraphAsync(VaultDbContextFactory contextFactory)
@@ -90,6 +98,26 @@ public sealed class PersistenceQueryTests
             [
                 new() { AccountId = accountId, ChampionId = 1, Name = "Champion 1" },
                 new() { AccountId = accountId, ChampionId = 2, Name = "Champion 2" }
+            ],
+            ChampionMasteries =
+            [
+                new() { AccountId = accountId, ChampionId = 1, Level = 3 },
+                new() { AccountId = accountId, ChampionId = 2, Level = 7 }
+            ],
+            EternalSummaries =
+            [
+                new() { AccountId = accountId, ChampionId = 1 },
+                new() { AccountId = accountId, ChampionId = 2 }
+            ],
+            EternalSets =
+            [
+                new() { AccountId = accountId, ChampionId = 1, SetId = 1 },
+                new() { AccountId = accountId, ChampionId = 2, SetId = 1 }
+            ],
+            Eternals =
+            [
+                new() { AccountId = accountId, ChampionId = 1, SetId = 1, StatstoneId = "eternal-1" },
+                new() { AccountId = accountId, ChampionId = 2, SetId = 1, StatstoneId = "eternal-2" }
             ],
             Skins =
             [

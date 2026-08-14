@@ -1,6 +1,7 @@
 ﻿using System.Data.Common;
 using System.Globalization;
 using System.Security.Cryptography;
+using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -16,7 +17,9 @@ namespace SummonersVault.Infrastructure.Persistence;
 public sealed class EncryptedVaultStore(VaultPaths paths) : IVaultStore, IAccountRepository
 {
     internal const string BaselineMigrationId = "20260812203337_InitialCurrentSchema";
+    internal const string ChampionProgressionMigrationId = "20260813214021_AddChampionProgression";
     private static readonly TimeSpan MigrationTimeout = TimeSpan.FromSeconds(15);
+    private static readonly string[] ChampionProgressionTables = ["champion_masteries", "champion_eternal_summaries", "champion_eternal_sets", "champion_eternals"];
     private static int _sqliteInitialized;
     private int _disposeState;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -113,6 +116,30 @@ public sealed class EncryptedVaultStore(VaultPaths paths) : IVaultStore, IAccoun
         }
     }
 
+    public async Task<IReadOnlyList<LeagueAccountIdentity>> GetLeagueAccountIdentitiesAsync(CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using VaultDbContext context = CreateContext();
+            return await context.Accounts
+                .AsNoTracking()
+                .Select(account => new LeagueAccountIdentity(
+                    account.Id,
+                    account.LoginIdentifier,
+                    account.Label,
+                    account.Puuid,
+                    account.RiotGameName,
+                    account.RiotTagLine))
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     public async Task<VaultAccount?> GetAccountAsync(Guid accountId, CancellationToken cancellationToken = default)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -191,11 +218,48 @@ public sealed class EncryptedVaultStore(VaultPaths paths) : IVaultStore, IAccoun
         {
             await using VaultDbContext context = CreateTrackingContext();
             await using IDbContextTransaction transaction = await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-            AccountEntity entity = await AccountTrackedQuery(context).SingleOrDefaultAsync(account => account.Id == accountId, cancellationToken).ConfigureAwait(false)
+            AccountEntity entity = await AccountSnapshotTrackedQuery(context).SingleOrDefaultAsync(account => account.Id == accountId, cancellationToken).ConfigureAwait(false)
                 ?? throw new InvalidOperationException("Account no longer exists.");
             try
             {
                 ApplySnapshot(entity, snapshot);
+                await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(entity.Password);
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task ApplyChampionProgressionAsync(
+        Guid accountId,
+        ChampionProgressionSnapshot snapshot,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using VaultDbContext context = CreateTrackingContext();
+            await using IDbContextTransaction transaction = await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            AccountEntity entity = await AccountProgressionTrackedQuery(context)
+                .SingleOrDefaultAsync(account => account.Id == accountId, cancellationToken)
+                .ConfigureAwait(false)
+                ?? throw new InvalidOperationException("Account no longer exists.");
+            try
+            {
+                if (!string.Equals(entity.Puuid, snapshot.Puuid, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException("The account identity changed before champion progression could be saved.");
+                }
+
+                ApplyChampionProgression(entity, snapshot);
                 await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
                 await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             }
@@ -271,6 +335,10 @@ public sealed class EncryptedVaultStore(VaultPaths paths) : IVaultStore, IAccoun
 
             context.Ranks.RemoveRange(entity.Ranks);
             context.Champions.RemoveRange(entity.Champions);
+            context.ChampionMasteries.RemoveRange(entity.ChampionMasteries);
+            context.EternalSummaries.RemoveRange(entity.EternalSummaries);
+            context.EternalSets.RemoveRange(entity.EternalSets);
+            context.Eternals.RemoveRange(entity.Eternals);
             context.Skins.RemoveRange(entity.Skins);
             context.LootItems.RemoveRange(entity.LootItems);
             context.SyncCategories.RemoveRange(entity.SyncCategories);
@@ -298,6 +366,26 @@ public sealed class EncryptedVaultStore(VaultPaths paths) : IVaultStore, IAccoun
     }
 
     private static IQueryable<AccountEntity> AccountTrackedQuery(VaultDbContext context) => context.Accounts
+        .Include(account => account.Ranks)
+        .Include(account => account.Champions)
+        .Include(account => account.ChampionMasteries)
+        .Include(account => account.EternalSummaries)
+        .Include(account => account.EternalSets)
+        .Include(account => account.Eternals)
+        .Include(account => account.Skins)
+        .Include(account => account.LootItems)
+        .Include(account => account.SyncCategories)
+        .AsSplitQuery();
+
+    private static IQueryable<AccountEntity> AccountProgressionTrackedQuery(VaultDbContext context) => context.Accounts
+        .Include(account => account.ChampionMasteries)
+        .Include(account => account.EternalSummaries)
+        .Include(account => account.EternalSets)
+        .Include(account => account.Eternals)
+        .Include(account => account.SyncCategories)
+        .AsSplitQuery();
+
+    private static IQueryable<AccountEntity> AccountSnapshotTrackedQuery(VaultDbContext context) => context.Accounts
         .Include(account => account.Ranks)
         .Include(account => account.Champions)
         .Include(account => account.Skins)
@@ -335,6 +423,10 @@ public sealed class EncryptedVaultStore(VaultPaths paths) : IVaultStore, IAccoun
             BlueEssence = account.BlueEssence,
             Ranks = account.Ranks.ToList(),
             Champions = account.Champions.ToList(),
+            ChampionMasteries = account.ChampionMasteries.ToList(),
+            EternalSummaries = account.EternalSummaries.ToList(),
+            EternalSets = account.EternalSets.ToList(),
+            Eternals = account.Eternals.ToList(),
             Skins = account.Skins.ToList(),
             LootItems = account.LootItems.ToList(),
             SyncCategories = account.SyncCategories.ToList()
@@ -412,6 +504,10 @@ public sealed class EncryptedVaultStore(VaultPaths paths) : IVaultStore, IAccoun
         }
 
         await ValidateV4SchemaAsync(connection, tables, cancellationToken).ConfigureAwait(false);
+        List<string> championColumns = await GetColumnsAsync(connection, "champions", cancellationToken).ConfigureAwait(false);
+        bool alreadyHasChampionProgression = championColumns.Contains("alias", StringComparer.Ordinal)
+            && championColumns.Contains("variant", StringComparer.Ordinal)
+            && ChampionProgressionTables.All(table => tables.Contains(table, StringComparer.Ordinal));
         await using DbTransaction transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         await using SqliteCommand command = connection.CreateCommand();
         command.Transaction = (SqliteTransaction)transaction;
@@ -424,6 +520,14 @@ public sealed class EncryptedVaultStore(VaultPaths paths) : IVaultStore, IAccoun
             DROP TABLE schema_info;
             """;
         command.Parameters.AddWithValue("$migration", BaselineMigrationId);
+        if (alreadyHasChampionProgression)
+        {
+            command.CommandText = command.CommandText.Replace(
+                "DROP TABLE schema_info;",
+                "INSERT INTO \"__EFMigrationsHistory\" (\"MigrationId\", \"ProductVersion\") VALUES ($progressionMigration, '10.0.10'); DROP TABLE schema_info;",
+                StringComparison.Ordinal);
+            command.Parameters.AddWithValue("$progressionMigration", ChampionProgressionMigrationId);
+        }
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
@@ -523,7 +627,11 @@ public sealed class EncryptedVaultStore(VaultPaths paths) : IVaultStore, IAccoun
             BlueEssence = entity.BlueEssence
         };
         account.Ranks.AddRange(entity.Ranks.Select(rank => new RankSnapshot(rank.QueueType, rank.Tier, rank.Division, rank.LeaguePoints, rank.Wins, rank.Losses, rank.IsProvisional, rank.ProvisionalGamesRemaining, rank.RatedTier, rank.RatedRating)));
-        account.Champions.AddRange(entity.Champions.Select(champion => new OwnedChampion(champion.ChampionId, champion.Name, champion.BaseSplashPath, champion.SquarePortraitPath)));
+        account.Champions.AddRange(entity.Champions.Select(champion => new OwnedChampion(champion.ChampionId, champion.Name, champion.BaseSplashPath, champion.SquarePortraitPath, champion.Alias, (ChampionVariant)champion.Variant)));
+        account.ChampionMasteries.AddRange(entity.ChampionMasteries.Select(MapMastery));
+        account.EternalSummaries.AddRange(entity.EternalSummaries.Select(summary => new ChampionEternalSummary(summary.ChampionId, summary.MilestonesPassed, summary.StonesAvailable, summary.StonesIlluminated, summary.StonesOwned)));
+        account.EternalSets.AddRange(entity.EternalSets.Select(set => new ChampionEternalSet(set.ChampionId, set.SetId, set.Name, set.MilestonesPassed, set.StonesAvailable, set.StonesIlluminated, set.StonesOwned)));
+        account.Eternals.AddRange(entity.Eternals.Select(MapEternal));
         account.Skins.AddRange(OwnedSkinRules.Normalize(entity.Skins.Select(skin => new OwnedSkin(skin.SkinId, skin.ChampionId, skin.Name, skin.SplashPath, skin.TilePath))));
         account.LootItems.AddRange(entity.LootItems.Select(loot => new CraftingLootItem(loot.LootId, loot.LootName, loot.Type, loot.DisplayCategory, loot.LocalizedName, loot.LocalizedDescription, loot.Count, loot.Rarity, loot.ReferenceId, loot.AssetPath, loot.SplashPath, loot.TilePath, loot.ExpiresAtUtc, loot.DisenchantValue, loot.UpgradeEssenceValue)));
         account.SyncCategories.AddRange(entity.SyncCategories.Select(status => new SnapshotCategoryStatus((SnapshotCategory)status.Category, (SnapshotState)status.State, status.LastAttemptAtUtc, status.LastSuccessAtUtc)));
@@ -558,7 +666,11 @@ public sealed class EncryptedVaultStore(VaultPaths paths) : IVaultStore, IAccoun
     private static void ReplaceCollections(VaultAccount source, AccountEntity target)
     {
         target.Ranks = [.. source.Ranks.Select(rank => new RankEntity { AccountId = source.Id, QueueType = rank.QueueType, Tier = rank.Tier, Division = rank.Division, LeaguePoints = rank.LeaguePoints, Wins = rank.Wins, Losses = rank.Losses, IsProvisional = rank.IsProvisional, ProvisionalGamesRemaining = rank.ProvisionalGamesRemaining, RatedTier = rank.RatedTier, RatedRating = rank.RatedRating })];
-        target.Champions = [.. source.Champions.Select(champion => new ChampionEntity { AccountId = source.Id, ChampionId = champion.ChampionId, Name = champion.Name, BaseSplashPath = champion.BaseSplashAssetPath, SquarePortraitPath = champion.SquarePortraitAssetPath })];
+        target.Champions = [.. source.Champions.Select(champion => MapChampion(source.Id, champion))];
+        target.ChampionMasteries = [.. source.ChampionMasteries.Select(mastery => MapMastery(source.Id, mastery))];
+        target.EternalSummaries = [.. source.EternalSummaries.Select(summary => MapEternalSummary(source.Id, summary))];
+        target.EternalSets = [.. source.EternalSets.Select(set => MapEternalSet(source.Id, set))];
+        target.Eternals = [.. source.Eternals.Select(eternal => MapEternal(source.Id, eternal))];
         target.Skins = [.. OwnedSkinRules.Normalize(source.Skins).Select(skin => new SkinEntity { AccountId = source.Id, SkinId = skin.SkinId, ChampionId = skin.ChampionId, Name = skin.Name, SplashPath = skin.SplashAssetPath, TilePath = skin.TileAssetPath })];
         target.LootItems = [.. source.LootItems.Select(loot => new LootItemEntity { AccountId = source.Id, LootId = loot.LootId, LootName = loot.LootName, Type = loot.Type, DisplayCategory = loot.DisplayCategory, LocalizedName = loot.LocalizedName, LocalizedDescription = loot.LocalizedDescription, Count = loot.Count, Rarity = loot.Rarity, ReferenceId = loot.ReferenceId, AssetPath = loot.AssetPath, SplashPath = loot.SplashAssetPath, TilePath = loot.TileAssetPath, ExpiresAtUtc = loot.ExpiresAtUtc, DisenchantValue = loot.DisenchantValue, UpgradeEssenceValue = loot.UpgradeEssenceValue })];
         target.SyncCategories = [.. source.SyncCategories.Select(status => new SyncCategoryEntity { AccountId = source.Id, Category = (int)status.Category, State = (int)status.State, LastAttemptAtUtc = status.LastAttemptAtUtc, LastSuccessAtUtc = status.LastSuccessAtUtc })];
@@ -586,7 +698,7 @@ public sealed class EncryptedVaultStore(VaultPaths paths) : IVaultStore, IAccoun
 
         if (snapshot.Champions is not null)
         {
-            entity.Champions = [.. snapshot.Champions.Select(champion => new ChampionEntity { AccountId = entity.Id, ChampionId = champion.ChampionId, Name = champion.Name, BaseSplashPath = champion.BaseSplashAssetPath, SquarePortraitPath = champion.SquarePortraitAssetPath })];
+            entity.Champions = [.. snapshot.Champions.Select(champion => MapChampion(entity.Id, champion))];
         }
 
         if (snapshot.Skins is not null)
@@ -604,6 +716,16 @@ public sealed class EncryptedVaultStore(VaultPaths paths) : IVaultStore, IAccoun
         UpdateCategory(entity, SnapshotCategory.Champions, snapshot.Champions is not null, now);
         UpdateCategory(entity, SnapshotCategory.Skins, snapshot.Skins is not null, now);
         UpdateCategory(entity, SnapshotCategory.Crafting, snapshot.CraftingLoot is not null, now);
+        if (snapshot.ChampionMasteries is not null || snapshot.ChampionEternals is not null)
+        {
+            ApplyChampionProgression(entity, new ChampionProgressionSnapshot
+            {
+                Puuid = snapshot.Puuid,
+                ChampionMasteries = snapshot.ChampionMasteries,
+                ChampionEternals = snapshot.ChampionEternals
+            });
+        }
+
         if (snapshot.Match.Succeeded)
         {
             entity.MatchHistorySyncedAtUtc = now;
@@ -624,6 +746,128 @@ public sealed class EncryptedVaultStore(VaultPaths paths) : IVaultStore, IAccoun
         }
     }
 
+    private static void ApplyChampionProgression(AccountEntity entity, ChampionProgressionSnapshot snapshot)
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        entity.ModifiedAtUtc = now;
+        if (snapshot.ChampionMasteries is not null)
+        {
+            entity.ChampionMasteries = [.. snapshot.ChampionMasteries.Select(mastery => MapMastery(entity.Id, mastery))];
+        }
+
+        if (snapshot.ChampionEternals is { } eternals)
+        {
+            entity.EternalSummaries = [.. eternals.Summaries.Select(summary => MapEternalSummary(entity.Id, summary))];
+            HashSet<int> clearChampionIds =
+            [
+                .. eternals.Summaries.Where(summary => summary.StonesOwned == 0).Select(summary => summary.ChampionId),
+                .. eternals.SuccessfullyLoadedChampionIds
+            ];
+            entity.EternalSets.RemoveAll(set => clearChampionIds.Contains(set.ChampionId));
+            entity.Eternals.RemoveAll(eternal => clearChampionIds.Contains(eternal.ChampionId));
+            entity.EternalSets.AddRange(eternals.Sets.Select(set => MapEternalSet(entity.Id, set)));
+            entity.Eternals.AddRange(eternals.Eternals.Select(eternal => MapEternal(entity.Id, eternal)));
+        }
+
+        UpdateCategory(entity, SnapshotCategory.Mastery, snapshot.ChampionMasteries is not null, now);
+        UpdateEternalsCategory(entity, snapshot.ChampionEternals, now);
+    }
+
+    private static ChampionEntity MapChampion(Guid accountId, OwnedChampion champion) => new()
+    {
+        AccountId = accountId,
+        ChampionId = champion.ChampionId,
+        Name = champion.Name,
+        BaseSplashPath = champion.BaseSplashAssetPath,
+        SquarePortraitPath = champion.SquarePortraitAssetPath,
+        Alias = champion.Alias,
+        Variant = (int)champion.Variant
+    };
+
+    private static ChampionMasteryEntity MapMastery(Guid accountId, ChampionMastery mastery) => new()
+    {
+        AccountId = accountId,
+        ChampionId = mastery.ChampionId,
+        Level = mastery.Level,
+        Points = mastery.Points,
+        PointsSinceLastLevel = mastery.PointsSinceLastLevel,
+        PointsUntilNextLevel = mastery.PointsUntilNextLevel,
+        SeasonMilestone = mastery.SeasonMilestone,
+        HighestGrade = mastery.HighestGrade,
+        LastPlayAtUtc = mastery.LastPlayAtUtc,
+        MarksRequiredForNextLevel = mastery.MarksRequiredForNextLevel,
+        MilestoneGradesJson = JsonSerializer.Serialize(mastery.MilestoneGrades),
+        TokensEarned = mastery.TokensEarned
+    };
+
+    private static ChampionMastery MapMastery(ChampionMasteryEntity mastery) => new(
+        mastery.ChampionId, mastery.Level, mastery.Points, mastery.PointsSinceLastLevel,
+        mastery.PointsUntilNextLevel, mastery.SeasonMilestone, mastery.HighestGrade, mastery.LastPlayAtUtc,
+        mastery.MarksRequiredForNextLevel, DeserializeGrades(mastery.MilestoneGradesJson), mastery.TokensEarned);
+
+    private static string[] DeserializeGrades(string value)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<string[]>(value) ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
+    private static EternalSummaryEntity MapEternalSummary(Guid accountId, ChampionEternalSummary summary) => new()
+    {
+        AccountId = accountId,
+        ChampionId = summary.ChampionId,
+        MilestonesPassed = summary.MilestonesPassed,
+        StonesAvailable = summary.StonesAvailable,
+        StonesIlluminated = summary.StonesIlluminated,
+        StonesOwned = summary.StonesOwned
+    };
+
+    private static EternalSetEntity MapEternalSet(Guid accountId, ChampionEternalSet set) => new()
+    {
+        AccountId = accountId,
+        ChampionId = set.ChampionId,
+        SetId = set.SetId,
+        Name = set.Name,
+        MilestonesPassed = set.MilestonesPassed,
+        StonesAvailable = set.StonesAvailable,
+        StonesIlluminated = set.StonesIlluminated,
+        StonesOwned = set.StonesOwned
+    };
+
+    private static EternalEntity MapEternal(Guid accountId, ChampionEternal eternal) => new()
+    {
+        AccountId = accountId,
+        ChampionId = eternal.ChampionId,
+        SetId = eternal.SetId,
+        StatstoneId = eternal.StatstoneId,
+        Name = eternal.Name,
+        Description = eternal.Description,
+        Category = eternal.Category,
+        Value = eternal.Value,
+        FormattedValue = eternal.FormattedValue,
+        MilestoneLevel = eternal.MilestoneLevel,
+        FormattedMilestoneLevel = eternal.FormattedMilestoneLevel,
+        NextMilestone = eternal.NextMilestone,
+        PersonalBest = eternal.PersonalBest,
+        FormattedPersonalBest = eternal.FormattedPersonalBest,
+        IsComplete = eternal.IsComplete,
+        IsEpic = eternal.IsEpic,
+        IsFeatured = eternal.IsFeatured,
+        IsRetired = eternal.IsRetired,
+        ImageAssetPath = eternal.ImageAssetPath
+    };
+
+    private static ChampionEternal MapEternal(EternalEntity eternal) => new(
+        eternal.ChampionId, eternal.SetId, eternal.StatstoneId, eternal.Name, eternal.Description, eternal.Category,
+        eternal.Value, eternal.FormattedValue, eternal.MilestoneLevel, eternal.FormattedMilestoneLevel,
+        eternal.NextMilestone, eternal.PersonalBest, eternal.FormattedPersonalBest, eternal.IsComplete,
+        eternal.IsEpic, eternal.IsFeatured, eternal.IsRetired, eternal.ImageAssetPath);
+
     private static void UpdateCategory(AccountEntity account, SnapshotCategory category, bool succeeded, DateTimeOffset attemptedAt)
     {
         SyncCategoryEntity? previous = account.SyncCategories.FirstOrDefault(status => status.Category == (int)category);
@@ -635,6 +879,26 @@ public sealed class EncryptedVaultStore(VaultPaths paths) : IVaultStore, IAccoun
             State = (int)(succeeded ? SnapshotState.Current : previous?.LastSuccessAtUtc is null ? SnapshotState.Unknown : SnapshotState.Stale),
             LastAttemptAtUtc = attemptedAt,
             LastSuccessAtUtc = succeeded ? attemptedAt : previous?.LastSuccessAtUtc
+        });
+    }
+
+    private static void UpdateEternalsCategory(AccountEntity account, ChampionEternalsSnapshot? snapshot, DateTimeOffset attemptedAt)
+    {
+        if (snapshot is null || snapshot.IsComplete)
+        {
+            UpdateCategory(account, SnapshotCategory.Eternals, snapshot?.IsComplete == true, attemptedAt);
+            return;
+        }
+
+        SyncCategoryEntity? previous = account.SyncCategories.FirstOrDefault(status => status.Category == (int)SnapshotCategory.Eternals);
+        account.SyncCategories.RemoveAll(status => status.Category == (int)SnapshotCategory.Eternals);
+        account.SyncCategories.Add(new SyncCategoryEntity
+        {
+            AccountId = account.Id,
+            Category = (int)SnapshotCategory.Eternals,
+            State = (int)SnapshotState.Stale,
+            LastAttemptAtUtc = attemptedAt,
+            LastSuccessAtUtc = previous?.LastSuccessAtUtc
         });
     }
 }

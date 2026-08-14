@@ -34,6 +34,8 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     private readonly IUpdateService _updates;
     private readonly UpdateWorkflow _updateWorkflow;
     private readonly List<VaultAccount> _accounts = [];
+    private readonly Dictionary<Guid, CancellationTokenSource> _progressionSynchronizations = [];
+    private readonly Dictionary<Guid, string> _synchronizedProgressionPuuids = [];
     private CancellationTokenSource? _searchDelay;
     private Guid? _pendingLeagueAccountId;
     private bool _pendingSignInNotified;
@@ -145,6 +147,10 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     public bool IsLocked => State == ShellState.Locked;
     public bool IsVault => State == ShellState.Vault;
     public bool CanAuthenticate => !IsBusy;
+    public event Action<Guid>? ChampionProgressionUpdated;
+    public event Action<Guid>? ChampionProgressionSynchronizationFinished;
+
+    internal bool IsChampionProgressionSynchronizing(Guid accountId) => _progressionSynchronizations.ContainsKey(accountId);
 
     partial void OnStateChanged(ShellState value) { OnPropertyChanged(nameof(IsOnboarding)); OnPropertyChanged(nameof(IsLocked)); OnPropertyChanged(nameof(IsVault)); }
     partial void OnIsBusyChanged(bool value) => OnPropertyChanged(nameof(CanAuthenticate));
@@ -246,6 +252,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 
     public async Task LockAsync()
     {
+        CancelProgressionSynchronizations();
         _clipboard.ClearOwned();
         _accounts.Clear(); Accounts.Clear();
         await _vault.LockAsync();
@@ -280,6 +287,12 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 
     public async Task DeleteAsync(Guid accountId)
     {
+        if (_progressionSynchronizations.Remove(accountId, out CancellationTokenSource? cancellation))
+        {
+            cancellation.Cancel();
+        }
+
+        _synchronizedProgressionPuuids.Remove(accountId);
         await _accountService.DeleteAsync(accountId);
         await RefreshAsync();
         StatusMessage = "Account removed";
@@ -315,6 +328,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     {
         _pendingLeagueAccountId = accountId;
         _pendingSignInNotified = false;
+        _synchronizedProgressionPuuids.Remove(accountId);
         bool launched = await _league.LaunchAsync(Settings.LeagueInstallDirectory);
         StatusMessage = launched ? "Riot Client launched - sign in and this account will sync automatically" : "Riot Client installation was not found. Set its folder in Settings.";
     }
@@ -343,11 +357,13 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
                 try
                 {
                     IsBusy = true;
-                    LeagueSnapshot snapshot = await SynchronizeAccountAsync(accountId);
+                    LeagueSnapshot snapshot = await SynchronizeAccountAsync(accountId, forceProgression: false);
                     if (snapshot.HasCompleteSyncData)
                     {
                         _pendingLeagueAccountId = null;
-                        StatusMessage = "League profile synchronized";
+                        StatusMessage = _progressionSynchronizations.ContainsKey(accountId)
+                            ? "League profile synchronized - champion progression is updating in the background"
+                            : "League profile synchronized";
                     }
                     else
                     {
@@ -376,7 +392,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         {
             IsBusy = true;
             StatusMessage = "Reading the signed-in League account…";
-            LeagueSnapshot snapshot = await SynchronizeAccountAsync(accountId);
+            LeagueSnapshot snapshot = await SynchronizeAccountAsync(accountId, forceProgression: true);
             if (snapshot.HasCompleteSyncData)
             {
                 if (_pendingLeagueAccountId == accountId)
@@ -384,7 +400,9 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
                     _pendingLeagueAccountId = null;
                 }
 
-                StatusMessage = "League profile synchronized";
+                StatusMessage = _progressionSynchronizations.ContainsKey(accountId)
+                    ? "League profile synchronized - champion progression is updating in the background"
+                    : "League profile synchronized";
             }
             else
             {
@@ -402,11 +420,85 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         return errorMessage;
     }
 
-    private async Task<LeagueSnapshot> SynchronizeAccountAsync(Guid accountId)
+    private async Task<LeagueSnapshot> SynchronizeAccountAsync(Guid accountId, bool forceProgression)
     {
         LeagueSnapshot snapshot = await _leagueSynchronization.SynchronizeAsync(accountId);
         await RefreshAsync();
+        StartChampionProgressionSynchronization(accountId, snapshot.Puuid, forceProgression);
         return snapshot;
+    }
+
+    private void StartChampionProgressionSynchronization(Guid accountId, string puuid, bool forceProgression)
+    {
+        if (!IsVault
+            || _progressionSynchronizations.ContainsKey(accountId)
+            || !forceProgression
+            && _synchronizedProgressionPuuids.TryGetValue(accountId, out string? synchronizedPuuid)
+            && string.Equals(synchronizedPuuid, puuid, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var cancellation = new CancellationTokenSource();
+        _progressionSynchronizations.Add(accountId, cancellation);
+        _ = SynchronizeChampionProgressionInBackgroundAsync(accountId, puuid, cancellation);
+    }
+
+    private async Task SynchronizeChampionProgressionInBackgroundAsync(
+        Guid accountId,
+        string puuid,
+        CancellationTokenSource cancellation)
+    {
+        try
+        {
+            ChampionProgressionSnapshot snapshot = await _leagueSynchronization.SynchronizeChampionProgressionAsync(
+                accountId,
+                puuid,
+                cancellation.Token);
+            if (!IsVault || cancellation.IsCancellationRequested)
+            {
+                return;
+            }
+
+            await RefreshAsync();
+            _synchronizedProgressionPuuids[accountId] = puuid;
+            ChampionProgressionUpdated?.Invoke(accountId);
+            StatusMessage = snapshot.IsComplete
+                ? "League profile and champion progression synchronized"
+                : "League profile synchronized, but some champion progression is still loading. Try again shortly.";
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or InvalidDataException or HttpRequestException or TaskCanceledException)
+        {
+            if (IsVault && !cancellation.IsCancellationRequested)
+            {
+                StatusMessage = "League profile synchronized, but champion progression could not be refreshed.";
+            }
+        }
+        finally
+        {
+            if (_progressionSynchronizations.TryGetValue(accountId, out CancellationTokenSource? current)
+                && ReferenceEquals(current, cancellation))
+            {
+                _progressionSynchronizations.Remove(accountId);
+            }
+
+            ChampionProgressionSynchronizationFinished?.Invoke(accountId);
+            cancellation.Dispose();
+        }
+    }
+
+    private void CancelProgressionSynchronizations()
+    {
+        foreach (CancellationTokenSource cancellation in _progressionSynchronizations.Values)
+        {
+            cancellation.Cancel();
+        }
+
+        _progressionSynchronizations.Clear();
+        _synchronizedProgressionPuuids.Clear();
     }
 
     private static string DescribeMissingSyncData(LeagueSnapshot snapshot)
@@ -621,6 +713,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        CancelProgressionSynchronizations();
         _searchDelay?.Cancel(); _searchDelay?.Dispose();
         _clipboard.ClearOwned();
         if (_vault.IsUnlocked)

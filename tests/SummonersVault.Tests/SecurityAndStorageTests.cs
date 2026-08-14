@@ -251,7 +251,9 @@ public sealed class SecurityAndStorageTests
             Skins = [],
             Ranks = [],
             CraftingLoot = [],
-            Wallet = new(0, 0)
+            Wallet = new(0, 0),
+            ChampionMasteries = [],
+            ChampionEternals = new([], [], [], new HashSet<int>(), true)
         }.HasCompleteSyncData);
     }
 
@@ -319,15 +321,31 @@ public sealed class SecurityAndStorageTests
                 Region = "EUW1",
                 Ranks = [new("RANKED_SOLO_5x5", "GOLD", "II", 44, 20, 10, true, 2)],
                 Champions = [new(1, "Annie", "/lol-game-data/assets/a.jpg", "/lol-game-data/assets/b.jpg")],
+                ChampionMasteries = [new(1, 7, 100000, 1000, 9000, 3, "S", DateTimeOffset.UtcNow, 3, ["S"], 1)],
+                ChampionEternals = new(
+                    [new(1, 10, 3, 1, 2)],
+                    [new(1, 1, "Series 1", 10, 3, 1, 2)],
+                    [new(1, 1, "eternal", "Firestarter", null, null, 100, "100", 3, "3", 200, null, null, false, false, true, false, null)],
+                    new HashSet<int> { 1 },
+                    true),
                 Skins = [new(1001, 1, "Goth Annie", "/lol-game-data/assets/c.jpg", "/lol-game-data/assets/d.jpg")],
                 CraftingLoot = [new("loot", "loot", "MATERIAL", "Materials", "Key", null, 3, "Rare", null, null, null, "/lol-game-data/assets/key.png", null, 10, 20)],
                 Wallet = new(100, 200)
             }, TestContext.Current.CancellationToken);
             await repository.ApplyLeagueSnapshotAsync(account.Id, Snapshot(MatchSnapshotResult.Failed), TestContext.Current.CancellationToken);
+            VaultAccount? afterBaseRefresh = await repository.GetAccountAsync(account.Id, TestContext.Current.CancellationToken);
+            Assert.Equal(SnapshotState.Current, afterBaseRefresh!.SyncCategories.Single(status => status.Category == SnapshotCategory.Mastery).State);
+            Assert.Equal(SnapshotState.Current, afterBaseRefresh.SyncCategories.Single(status => status.Category == SnapshotCategory.Eternals).State);
+            await repository.ApplyChampionProgressionAsync(account.Id, new ChampionProgressionSnapshot
+            {
+                Puuid = "puuid"
+            }, TestContext.Current.CancellationToken);
             VaultAccount? loaded = await repository.GetAccountAsync(account.Id, TestContext.Current.CancellationToken);
             Assert.Equal("/lol-game-data/assets/a.jpg", Assert.Single(loaded!.Champions).BaseSplashAssetPath);
             Assert.True(Assert.Single(loaded.Ranks).IsProvisional);
             Assert.Equal(3, Assert.Single(loaded.LootItems).Count);
+            Assert.Equal(100000, Assert.Single(loaded.ChampionMasteries).Points);
+            Assert.Equal("Firestarter", Assert.Single(loaded.Eternals).Name);
             Assert.All(loaded.SyncCategories, state => Assert.Equal(SnapshotState.Stale, state.State));
         }
         finally
@@ -577,6 +595,11 @@ public sealed class SecurityAndStorageTests
             var sourcePaths = new VaultPaths(sourceRoot); await using var sourceRepository = new EncryptedVaultStore(sourcePaths); await using var sourceSession = new VaultSession(sourcePaths, sourceRepository);
             await sourceSession.CreateAsync("source password"u8.ToArray(), TestContext.Current.CancellationToken);
             var account = new VaultAccount { Username = "backup-user", Region = "NA1", LastMatchPlayedAtUtc = new(2026, 8, 4, 12, 0, 0, TimeSpan.Zero), LastMatchId = 999, MatchHistoryState = MatchHistoryState.Stale, RiotPoints = 500, BlueEssence = 25000 };
+            account.Champions.Add(new(60103, "Ahri", Alias: "Jade_Ahri", Variant: ChampionVariant.LeagueClassic));
+            account.ChampionMasteries.Add(new(60103, 7, 123456, 1000, 9000, 3, "S+", DateTimeOffset.UtcNow, 3, ["S"], 2));
+            account.EternalSummaries.Add(new(60103, 12, 6, 2, 3));
+            account.EternalSets.Add(new(60103, 1, "Series 1", 12, 3, 2, 2));
+            account.Eternals.Add(new(60103, 1, "statstone", "Legacy Dash", "Track dashes", null, 42, "42", 5, "5", 50, 8, "8", true, false, true, true, null));
             using (var password = new SensitiveBuffer("backup-secret"u8.ToArray()))
             {
                 await sourceRepository.SaveAccountAsync(new(account, password), TestContext.Current.CancellationToken);
@@ -594,6 +617,11 @@ public sealed class SecurityAndStorageTests
             VaultAccount imported = Assert.Single(await targetRepository.GetAccountsAsync(TestContext.Current.CancellationToken));
             Assert.Equal(account.LastMatchPlayedAtUtc, imported.LastMatchPlayedAtUtc); Assert.Equal(999, imported.LastMatchId); Assert.Equal(MatchHistoryState.Stale, imported.MatchHistoryState);
             Assert.Equal(500, imported.RiotPoints); Assert.Equal(25000, imported.BlueEssence);
+            Assert.Equal(ChampionVariant.LeagueClassic, Assert.Single(imported.Champions).Variant);
+            Assert.Equal(123456, Assert.Single(imported.ChampionMasteries).Points);
+            Assert.Equal(12, Assert.Single(imported.EternalSummaries).MilestonesPassed);
+            Assert.Equal("Series 1", Assert.Single(imported.EternalSets).Name);
+            Assert.True(Assert.Single(imported.Eternals).IsRetired);
             using SensitiveBuffer? importedPassword = await targetRepository.GetPasswordAsync(imported.Id, TestContext.Current.CancellationToken);
             Assert.NotNull(importedPassword);
             Assert.Equal("backup-secret", Encoding.UTF8.GetString(importedPassword.Memory.Span));

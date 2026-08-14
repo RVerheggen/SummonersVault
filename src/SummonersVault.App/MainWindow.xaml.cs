@@ -57,6 +57,19 @@ public partial class MainWindow : Window
         }, DispatcherPriority.Input);
     }
 
+    internal void FocusInitialPasswordInput()
+    {
+        _ = Dispatcher.InvokeAsync(() =>
+        {
+            PasswordBox passwordBox = _viewModel.IsOnboarding ? CreatePassword : UnlockPassword;
+            if (passwordBox.IsEnabled)
+            {
+                passwordBox.Focus();
+                Keyboard.Focus(passwordBox);
+            }
+        }, DispatcherPriority.Input);
+    }
+
     private void UnlockPassword_KeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key != Key.Enter)

@@ -15,6 +15,21 @@ public sealed partial class AccountDetailsViewModel : ObservableObject, IDisposa
     public partial string ChampionQuery { get; set; } = string.Empty;
 
     [ObservableProperty]
+    public partial string ChampionCollection { get; set; } = "Current champions";
+
+    [ObservableProperty]
+    public partial string ChampionSort { get; set; } = "Name";
+
+    [ObservableProperty]
+    public partial string ChampionSortDirection { get; set; } = "Ascending";
+
+    [ObservableProperty]
+    public partial int ChampionColumnCount { get; set; } = 3;
+
+    [ObservableProperty]
+    public partial ChampionGalleryItem? SelectedChampion { get; set; }
+
+    [ObservableProperty]
     public partial string SkinQuery { get; set; } = string.Empty;
 
     [ObservableProperty]
@@ -23,12 +38,18 @@ public sealed partial class AccountDetailsViewModel : ObservableObject, IDisposa
     [ObservableProperty]
     public partial string LootCategory { get; set; } = "All";
 
+    [ObservableProperty]
+    public partial string SynchronizationStatus { get; set; } = string.Empty;
+
     public AccountDetailsViewModel(VaultAccount account, IArtworkService artworkService, AppSettings settings)
     {
         _account = account;
         ArtworkService = artworkService;
         AllowCommunityDragon = settings.DownloadCommunityDragonArtwork;
         LootCategories = ["All", "Currencies", "Materials", "Champion shards", "Skin shards", "Other"];
+        ChampionCollections = BuildChampionCollections();
+        ChampionSortOptions = ["Name", "Mastery level", "Mastery points"];
+        ChampionSortDirections = ["Ascending", "Descending"];
         Pair(Ranks, RankRows);
         ApplyFilters();
     }
@@ -46,13 +67,22 @@ public sealed partial class AccountDetailsViewModel : ObservableObject, IDisposa
     public string OrangeEssence => CurrencyTotal("CURRENCY_cosmetic");
     public string MythicEssence => CurrencyTotal("CURRENCY_mythic", "Mythic Essence");
     public string Notes => string.IsNullOrWhiteSpace(_account.Notes) ? "No notes for this account." : _account.Notes;
-    public string OwnershipSummary => $"{_account.Champions.Count} champions · {_account.Skins.Count} skins · {_account.LootItems.Count} crafting entries";
+    public string OwnershipSummary => $"{CurrentChampionCount} current champions · {ClassicChampionCount} League Classic champions · {_account.Skins.Count} skins · {_account.LootItems.Count} crafting entries";
     public string SyncSummary => _account.LastSyncedAtUtc is { } value ? $"Last synchronized {value.ToLocalTime():g}" : "League data has not been synchronized.";
     public IReadOnlyList<string> LootCategories { get; }
+    public IReadOnlyList<string> ChampionCollections { get; }
+    public IReadOnlyList<string> ChampionSortOptions { get; }
+    public IReadOnlyList<string> ChampionSortDirections { get; }
+    public int CurrentChampionCount => _account.Champions.Count(champion => champion.Variant == ChampionVariant.Current);
+    public int ClassicChampionCount => _account.Champions.Count(champion => champion.Variant == ChampionVariant.LeagueClassic);
+    public bool HasOtherChampions => _account.Champions.Any(champion => champion.Variant == ChampionVariant.Unknown);
+    public bool IsChampionGalleryVisible => SelectedChampion is null;
+    public bool IsChampionProgressionVisible => SelectedChampion is not null;
+    public bool IsSynchronizationInProgress => !string.IsNullOrWhiteSpace(SynchronizationStatus);
     public ObservableCollection<ChampionGalleryItem> Champions { get; } = [];
     public ObservableCollection<SkinGalleryItem> Skins { get; } = [];
     public ObservableCollection<CraftingGalleryItem> Loot { get; } = [];
-    public ObservableCollection<GalleryPair<ChampionGalleryItem>> ChampionRows { get; } = [];
+    public ObservableCollection<GalleryRow<ChampionGalleryItem>> ChampionRows { get; } = [];
     public ObservableCollection<GalleryPair<SkinGalleryItem>> SkinRows { get; } = [];
     public ObservableCollection<GalleryPair<CraftingGalleryItem>> LootRows { get; } = [];
     public ObservableCollection<GalleryPair<RankCardItem>> RankRows { get; } = [];
@@ -62,9 +92,19 @@ public sealed partial class AccountDetailsViewModel : ObservableObject, IDisposa
     public string LootCount => $"{Loot.Count} shown";
 
     partial void OnChampionQueryChanged(string value) => Debounce();
+    partial void OnChampionCollectionChanged(string value) => ApplyChampionFilter();
+    partial void OnChampionSortChanged(string value) => ApplyChampionFilter();
+    partial void OnChampionSortDirectionChanged(string value) => ApplyChampionFilter();
+    partial void OnChampionColumnCountChanged(int value) => BuildChampionRows();
+    partial void OnSelectedChampionChanged(ChampionGalleryItem? value)
+    {
+        OnPropertyChanged(nameof(IsChampionGalleryVisible));
+        OnPropertyChanged(nameof(IsChampionProgressionVisible));
+    }
     partial void OnSkinQueryChanged(string value) => Debounce();
     partial void OnLootQueryChanged(string value) => Debounce();
     partial void OnLootCategoryChanged(string value) => ApplyFilters();
+    partial void OnSynchronizationStatusChanged(string value) => OnPropertyChanged(nameof(IsSynchronizationInProgress));
 
     private async void Debounce()
     {
@@ -74,11 +114,7 @@ public sealed partial class AccountDetailsViewModel : ObservableObject, IDisposa
 
     private void ApplyFilters()
     {
-        Champions.Clear();
-        foreach (OwnedChampion? champion in _account.Champions.Where(x => Contains(x.Name, ChampionQuery)).OrderBy(x => x.Name))
-        {
-            Champions.Add(new(champion));
-        }
+        ApplyChampionFilter();
 
         Skins.Clear();
         var championNames = _account.Champions.ToDictionary(x => x.ChampionId, x => x.Name);
@@ -93,8 +129,80 @@ public sealed partial class AccountDetailsViewModel : ObservableObject, IDisposa
             Loot.Add(item);
         }
 
-        Pair(Champions, ChampionRows); Pair(Skins, SkinRows); Pair(Loot, LootRows);
-        OnPropertyChanged(nameof(ChampionCount)); OnPropertyChanged(nameof(SkinCount)); OnPropertyChanged(nameof(LootCount));
+        Pair(Skins, SkinRows); Pair(Loot, LootRows);
+        OnPropertyChanged(nameof(SkinCount)); OnPropertyChanged(nameof(LootCount));
+    }
+
+    public void SelectChampion(ChampionGalleryItem champion) => SelectedChampion = champion;
+    public void ShowChampionGallery() => SelectedChampion = null;
+
+    public void UpdateChampionViewport(double availableWidth)
+    {
+        int columns = availableWidth >= 1250 ? 4 : availableWidth >= 900 ? 3 : 2;
+        ChampionColumnCount = columns;
+    }
+
+    private void ApplyChampionFilter()
+    {
+        ChampionVariant variant = ChampionCollection switch
+        {
+            "League Classic" => ChampionVariant.LeagueClassic,
+            "Other" => ChampionVariant.Unknown,
+            _ => ChampionVariant.Current
+        };
+        Dictionary<int, ChampionMastery> masteries = _account.ChampionMasteries.ToDictionary(mastery => mastery.ChampionId);
+        Dictionary<int, ChampionEternalSummary> summaries = _account.EternalSummaries.ToDictionary(summary => summary.ChampionId);
+        SnapshotState masteryState = _account.SyncCategories.FirstOrDefault(status => status.Category == SnapshotCategory.Mastery)?.State ?? SnapshotState.Unknown;
+        SnapshotState eternalState = _account.SyncCategories.FirstOrDefault(status => status.Category == SnapshotCategory.Eternals)?.State ?? SnapshotState.Unknown;
+        IEnumerable<ChampionGalleryItem> items = _account.Champions
+            .Where(champion => champion.Variant == variant && Contains(champion.Name, ChampionQuery))
+            .Select(champion => new ChampionGalleryItem(champion, masteries.GetValueOrDefault(champion.ChampionId), summaries.GetValueOrDefault(champion.ChampionId),
+                [.. _account.EternalSets.Where(set => set.ChampionId == champion.ChampionId).OrderBy(set => set.Name).Select(set => new EternalSetGalleryItem(set,
+                    [.. _account.Eternals.Where(eternal => eternal.ChampionId == champion.ChampionId && eternal.SetId == set.SetId).OrderBy(eternal => eternal.Name).Select(eternal => new EternalGalleryItem(eternal))]))],
+                masteryState,
+                eternalState));
+        bool descending = ChampionSortDirection == "Descending";
+        items = ChampionSort switch
+        {
+            "Mastery level" => descending
+                ? items.OrderBy(item => item.Mastery is null).ThenByDescending(item => item.Mastery?.Level).ThenByDescending(item => item.Mastery?.Points).ThenBy(item => item.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(item => item.Champion.ChampionId)
+                : items.OrderBy(item => item.Mastery is null).ThenBy(item => item.Mastery?.Level).ThenBy(item => item.Mastery?.Points).ThenBy(item => item.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(item => item.Champion.ChampionId),
+            "Mastery points" => descending
+                ? items.OrderBy(item => item.Mastery is null).ThenByDescending(item => item.Mastery?.Points).ThenByDescending(item => item.Mastery?.Level).ThenBy(item => item.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(item => item.Champion.ChampionId)
+                : items.OrderBy(item => item.Mastery is null).ThenBy(item => item.Mastery?.Points).ThenBy(item => item.Mastery?.Level).ThenBy(item => item.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(item => item.Champion.ChampionId),
+            _ => descending
+                ? items.OrderByDescending(item => item.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(item => item.Champion.ChampionId)
+                : items.OrderBy(item => item.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(item => item.Champion.ChampionId)
+        };
+
+        Champions.Clear();
+        foreach (ChampionGalleryItem item in items)
+        {
+            Champions.Add(item);
+        }
+
+        BuildChampionRows();
+        OnPropertyChanged(nameof(ChampionCount));
+    }
+
+    private void BuildChampionRows()
+    {
+        ChampionRows.Clear();
+        for (int index = 0; index < Champions.Count; index += ChampionColumnCount)
+        {
+            ChampionRows.Add(new([.. Champions.Skip(index).Take(ChampionColumnCount)]));
+        }
+    }
+
+    private List<string> BuildChampionCollections()
+    {
+        var collections = new List<string> { "Current champions", "League Classic" };
+        if (HasOtherChampions)
+        {
+            collections.Add("Other");
+        }
+
+        return collections;
     }
 
     private static bool Contains(string? value, string query) => string.IsNullOrWhiteSpace(query) || value?.Contains(query.Trim(), StringComparison.CurrentCultureIgnoreCase) == true;
@@ -179,8 +287,55 @@ public sealed partial class AccountDetailsViewModel : ObservableObject, IDisposa
 }
 
 public sealed record GalleryPair<T>(T First, T? Second) where T : class;
+public sealed record GalleryRow<T>(IReadOnlyList<T> Items) where T : class;
 
-public sealed record ChampionGalleryItem(OwnedChampion Champion) { public string Name => Champion.Name; public string? Artwork => Champion.BaseSplashAssetPath ?? Champion.SquarePortraitAssetPath; }
+public sealed record ChampionGalleryItem(
+    OwnedChampion Champion,
+    ChampionMastery? Mastery,
+    ChampionEternalSummary? EternalSummary,
+    IReadOnlyList<EternalSetGalleryItem> EternalSets,
+    SnapshotState MasteryState,
+    SnapshotState EternalState)
+{
+    public string Name => Champion.Name;
+    public string? Artwork => Champion.BaseSplashAssetPath ?? Champion.SquarePortraitAssetPath;
+    public bool IsClassic => Champion.Variant == ChampionVariant.LeagueClassic;
+    public string MasteryLevel => Mastery is null ? "Not synced" : $"Mastery {Mastery.Level}";
+    public string MasteryPoints => Mastery is null ? "Mastery points not synced" : $"{Mastery.Points:N0} mastery points";
+    public string EternalProgress => EternalSummary is null ? "Eternals not synced" : $"{EternalSummary.MilestonesPassed:N0} milestones · {EternalSummary.StonesIlluminated:N0} illuminated";
+    public string ProgressionStatus => MasteryState == SnapshotState.Stale || EternalState == SnapshotState.Stale ? "Progression data may be stale" : string.Empty;
+    public string EternalEmptyMessage => EternalSets.Count == 0 ? EternalSummary is null ? "Eternals have not been synchronized." : "No owned Eternals for this champion." : string.Empty;
+    public string HighestGrade => string.IsNullOrWhiteSpace(Mastery?.HighestGrade) ? "No highest grade" : $"Highest grade {Mastery.HighestGrade}";
+    public string LastMasteryPlay => Mastery?.LastPlayAtUtc is { } played ? $"Last mastery play {played.ToLocalTime():g}" : "Last mastery play not available";
+    public string MasteryProgress => Mastery is null ? "Mastery is not synchronized." : Mastery.PointsUntilNextLevel > 0
+        ? $"{Mastery.PointsSinceLastLevel:N0} earned · {Mastery.PointsUntilNextLevel:N0} until next level"
+        : $"{Mastery.TokensEarned:N0} marks earned · {Mastery.MarksRequiredForNextLevel:N0} required for next level";
+}
+
+public sealed record EternalSetGalleryItem(ChampionEternalSet Set, IReadOnlyList<EternalGalleryItem> Eternals)
+{
+    public string Name => Set.Name;
+    public string Summary => $"{Set.MilestonesPassed:N0} milestones · {Set.StonesIlluminated:N0} illuminated";
+}
+
+public sealed record EternalGalleryItem(ChampionEternal Eternal)
+{
+    public string Name => Eternal.Name;
+    public string? Description => string.Join(" · ", new[] { Eternal.Description, Progress }.Where(value => !string.IsNullOrWhiteSpace(value)));
+    public string Value => string.IsNullOrWhiteSpace(Eternal.FormattedValue) ? Eternal.Value.ToString("N0", CultureInfo.CurrentCulture) : Eternal.FormattedValue;
+    public string FormattedValue { get; set; } = string.IsNullOrWhiteSpace(Eternal.FormattedValue)
+        ? Eternal.Value.ToString("N0", CultureInfo.CurrentCulture)
+        : Eternal.FormattedValue;
+    public int MilestoneLevel { get; set; } = Eternal.MilestoneLevel;
+    public string Progress => string.Join(" · ", new[]
+    {
+        Eternal.NextMilestone is { } next ? $"Next milestone {next:N0}" : null,
+        Eternal.PersonalBest is { } best ? $"Personal best {Eternal.FormattedPersonalBest ?? best.ToString("N0", CultureInfo.CurrentCulture)}" : null
+    }.Where(value => value is not null));
+    public bool IsFeatured => Eternal.IsFeatured;
+    public bool IsComplete => Eternal.IsComplete;
+    public bool IsRetired => Eternal.IsRetired;
+}
 public sealed record SkinGalleryItem(OwnedSkin Skin, string ChampionName) { public string Name => Skin.Name; public string Subtitle => ChampionName; public string? Artwork => Skin.SplashAssetPath ?? Skin.TileAssetPath; }
 public sealed record CraftingGalleryItem(CraftingLootItem Item, string Name, string Category)
 {

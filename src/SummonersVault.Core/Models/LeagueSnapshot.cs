@@ -13,6 +13,8 @@ public sealed class LeagueSnapshot
     public LeagueWalletSnapshot? Wallet { get; init; }
     public IReadOnlyList<RankSnapshot>? Ranks { get; init; }
     public IReadOnlyList<OwnedChampion>? Champions { get; init; }
+    public IReadOnlyList<ChampionMastery>? ChampionMasteries { get; init; }
+    public ChampionEternalsSnapshot? ChampionEternals { get; init; }
     public IReadOnlyList<OwnedSkin>? Skins { get; init; }
     public IReadOnlyList<CraftingLootItem>? CraftingLoot { get; init; }
     public MatchSnapshotResult Match { get; init; } = MatchSnapshotResult.Failed;
@@ -20,6 +22,21 @@ public sealed class LeagueSnapshot
     public bool HasCompleteSyncData => HasCompleteInventory && Ranks is not null && CraftingLoot is not null
         && Wallet is { RiotPoints: not null, BlueEssence: not null };
 }
+
+public sealed class ChampionProgressionSnapshot
+{
+    public required string Puuid { get; init; }
+    public IReadOnlyList<ChampionMastery>? ChampionMasteries { get; init; }
+    public ChampionEternalsSnapshot? ChampionEternals { get; init; }
+    public bool IsComplete => ChampionMasteries is not null && ChampionEternals?.IsComplete == true;
+}
+
+public sealed record ChampionEternalsSnapshot(
+    IReadOnlyList<ChampionEternalSummary> Summaries,
+    IReadOnlyList<ChampionEternalSet> Sets,
+    IReadOnlyList<ChampionEternal> Eternals,
+    IReadOnlySet<int> SuccessfullyLoadedChampionIds,
+    bool IsComplete);
 
 public sealed record MatchSnapshotResult(bool Succeeded, bool HasMatch, DateTimeOffset? PlayedAtUtc, long? MatchId)
 {

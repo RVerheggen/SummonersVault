@@ -1,12 +1,14 @@
-# SummonersVault 1.0.0
+# SummonersVault 1.1.0
 
-First stable release of SummonersVault.
+Champion collections now provide a much richer view of your League progress.
 
-- Refactor the application into focused Core, Application, Infrastructure, and WPF presentation projects.
-- Replace hand-written persistence with EF Core while retaining SQLite3MC full-database encryption and compatibility with public schema version 4 vaults and backups.
-- Keep passwords outside normal account queries and retrieve them only through disposable sensitive buffers.
-- Preserve read-only League Client synchronization, encrypted backup import and export, artwork caching, and Velopack updates.
-- Protect account loading from EF Core cartesian query explosions with explicit and global split-query behavior plus regression tests.
-- Prevent repeated unlock attempts from displaying an incorrect password error after a successful unlock.
-- Restore keyboard focus to the master-password field after an unsuccessful unlock attempt.
-- Add repository-wide code-style enforcement, architecture documentation, migration validation, and expanded persistence and security tests.
+- See mastery level, mastery points, Eternal milestones, and illuminated Eternals directly on champion cards.
+- Open any champion for a detailed progression view with mastery progress, Eternal sets, milestone values, personal bests, and clear Featured, Complete, and Legacy labels.
+- Browse current and League Classic champions in separate collections, so alternate Classic versions no longer appear as unexplained duplicates.
+- Sort champions by name, mastery level, or mastery points in either direction.
+- Enjoy a responsive champion gallery that shows two, three, or four columns based on the window size.
+- Get faster synchronization feedback. Core account information, ranks, champions, skins, currencies, crafting items, and match history appear first while mastery and Eternals continue in the background.
+- Follow synchronization progress from the account details window without returning to the vault dashboard.
+- Benefit from refined champion cards, compact Classic labels, complete highlighted borders, and a larger splash-art progression header.
+- Start typing your master password immediately when SummonersVault opens.
+- Existing encrypted vaults and backups remain compatible and are upgraded automatically when needed.

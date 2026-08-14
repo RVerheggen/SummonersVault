@@ -45,6 +45,7 @@ public partial class App : System.Windows.Application
         MainWindow = window;
         window.Show();
         await viewModel.InitializeAsync();
+        window.FocusInitialPasswordInput();
         window.BeginAutomaticUpdateCheck();
     }
 

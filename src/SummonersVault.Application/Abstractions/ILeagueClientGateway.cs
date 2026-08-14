@@ -6,6 +6,7 @@ public interface ILeagueClientGateway
 {
     Task<LeagueClientStatus> GetStatusAsync(CancellationToken cancellationToken = default);
     Task<LeagueSnapshot> FetchCurrentSnapshotAsync(CancellationToken cancellationToken = default);
+    Task<ChampionProgressionSnapshot> FetchChampionProgressionAsync(CancellationToken cancellationToken = default);
     Task<bool> LaunchAsync(string? configuredInstallDirectory, CancellationToken cancellationToken = default);
     Task<byte[]?> FetchAssetAsync(string assetPath, CancellationToken cancellationToken = default);
 }

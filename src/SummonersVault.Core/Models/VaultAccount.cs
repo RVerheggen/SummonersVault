@@ -19,8 +19,9 @@ public enum MatchHistoryState
     Stale
 }
 
-public enum SnapshotCategory { Ranked, Wallet, Champions, Skins, Crafting }
+public enum SnapshotCategory { Ranked, Wallet, Champions, Skins, Crafting, Mastery, Eternals }
 public enum SnapshotState { Unknown, Current, Stale }
+public enum ChampionVariant { Current, LeagueClassic, Unknown }
 
 public sealed record SnapshotCategoryStatus(
     SnapshotCategory Category,
@@ -54,6 +55,10 @@ public sealed class VaultAccount
     public MatchHistoryState MatchHistoryState { get; set; }
     public List<RankSnapshot> Ranks { get; } = [];
     public List<OwnedChampion> Champions { get; } = [];
+    public List<ChampionMastery> ChampionMasteries { get; } = [];
+    public List<ChampionEternalSummary> EternalSummaries { get; } = [];
+    public List<ChampionEternalSet> EternalSets { get; } = [];
+    public List<ChampionEternal> Eternals { get; } = [];
     public List<OwnedSkin> Skins { get; } = [];
     public List<CraftingLootItem> LootItems { get; } = [];
     public List<SnapshotCategoryStatus> SyncCategories { get; } = [];
@@ -85,7 +90,58 @@ public sealed record OwnedChampion(
     int ChampionId,
     string Name,
     string? BaseSplashAssetPath = null,
-    string? SquarePortraitAssetPath = null);
+    string? SquarePortraitAssetPath = null,
+    string? Alias = null,
+    ChampionVariant Variant = ChampionVariant.Current);
+
+public sealed record ChampionMastery(
+    int ChampionId,
+    int Level,
+    long Points,
+    long PointsSinceLastLevel,
+    long PointsUntilNextLevel,
+    int SeasonMilestone,
+    string? HighestGrade,
+    DateTimeOffset? LastPlayAtUtc,
+    int MarksRequiredForNextLevel,
+    IReadOnlyList<string> MilestoneGrades,
+    int TokensEarned);
+
+public sealed record ChampionEternalSummary(
+    int ChampionId,
+    int MilestonesPassed,
+    int StonesAvailable,
+    int StonesIlluminated,
+    int StonesOwned);
+
+public sealed record ChampionEternalSet(
+    int ChampionId,
+    int SetId,
+    string Name,
+    int MilestonesPassed,
+    int StonesAvailable,
+    int StonesIlluminated,
+    int StonesOwned);
+
+public sealed record ChampionEternal(
+    int ChampionId,
+    int SetId,
+    string StatstoneId,
+    string Name,
+    string? Description,
+    string? Category,
+    double Value,
+    string? FormattedValue,
+    int MilestoneLevel,
+    string? FormattedMilestoneLevel,
+    double? NextMilestone,
+    double? PersonalBest,
+    string? FormattedPersonalBest,
+    bool IsComplete,
+    bool IsEpic,
+    bool IsFeatured,
+    bool IsRetired,
+    string? ImageAssetPath);
 
 public sealed record OwnedSkin(
     int SkinId,
