@@ -13,6 +13,11 @@ public sealed class UpdateTests
     {
         var settings = new AppSettings();
         Assert.True(settings.AutomaticallyCheckForUpdates);
+        Assert.True(settings.ShowExternalProfileLinks);
+        Assert.True(settings.ShowOpGgProfileLink);
+        Assert.True(settings.ShowDeepLolProfileLink);
+        Assert.True(settings.ShowDpmLolProfileLink);
+        Assert.True(settings.ShowLeagueOfGraphsProfileLink);
         Assert.Null(settings.LastUpdateCheckAtUtc);
     }
 
@@ -30,6 +35,11 @@ public sealed class UpdateTests
 
             Assert.Equal(30, settings.AutoLockMinutes);
             Assert.True(settings.AutomaticallyCheckForUpdates);
+            Assert.True(settings.ShowExternalProfileLinks);
+            Assert.True(settings.ShowOpGgProfileLink);
+            Assert.True(settings.ShowDeepLolProfileLink);
+            Assert.True(settings.ShowDpmLolProfileLink);
+            Assert.True(settings.ShowLeagueOfGraphsProfileLink);
             Assert.Null(settings.LastUpdateCheckAtUtc);
         }
         finally { Directory.Delete(root, recursive: true); }

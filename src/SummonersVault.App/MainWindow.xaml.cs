@@ -8,6 +8,7 @@ using Microsoft.Win32;
 using SummonersVault.App.Services;
 using SummonersVault.App.ViewModels;
 using SummonersVault.Application.Abstractions;
+using SummonersVault.Application.ExternalProfiles;
 using SummonersVault.Core.Models;
 
 namespace SummonersVault.App;
@@ -16,13 +17,17 @@ public partial class MainWindow : Window
 {
     private readonly MainViewModel _viewModel;
     private readonly IArtworkService _artwork;
+    private readonly IExternalProfileLauncher _externalProfileLauncher;
     private readonly DispatcherTimer _lockTimer;
     private readonly DispatcherTimer _clientTimer;
     private DateTimeOffset _lastActivity = DateTimeOffset.UtcNow;
 
-    public MainWindow(MainViewModel viewModel, IArtworkService artwork)
+    public MainWindow(
+        MainViewModel viewModel,
+        IArtworkService artwork,
+        IExternalProfileLauncher externalProfileLauncher)
     {
-        InitializeComponent(); DarkTitleBar.Attach(this); DataContext = _viewModel = viewModel; _artwork = artwork;
+        InitializeComponent(); DarkTitleBar.Attach(this); DataContext = _viewModel = viewModel; _artwork = artwork; _externalProfileLauncher = externalProfileLauncher;
         PreviewMouseDown += (_, _) => MarkActive(); PreviewKeyDown += (_, _) => MarkActive(); PreviewTouchDown += (_, _) => MarkActive();
         _lockTimer = new DispatcherTimer(TimeSpan.FromSeconds(10), DispatcherPriority.Background, CheckAutoLock, Dispatcher);
         _clientTimer = new DispatcherTimer(TimeSpan.FromSeconds(5), DispatcherPriority.Background, CheckClient, Dispatcher);
@@ -123,7 +128,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        new AccountDetailsWindow(_viewModel, account, _artwork) { Owner = this }.Show();
+        new AccountDetailsWindow(_viewModel, account, _artwork, _externalProfileLauncher) { Owner = this }.Show();
     }
 
     private async void CopyLogin_Click(object sender, RoutedEventArgs e)

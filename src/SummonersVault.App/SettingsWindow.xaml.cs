@@ -18,6 +18,11 @@ public partial class SettingsWindow : Window
         SessionLock.IsChecked = viewModel.Settings.LockOnSessionLockOrSleep;
         LeaguePath.Text = viewModel.Settings.LeagueInstallDirectory;
         CommunityDragonDownloads.IsChecked = viewModel.Settings.DownloadCommunityDragonArtwork;
+        ExternalProfiles.IsChecked = viewModel.Settings.ShowExternalProfileLinks;
+        OpGgProfile.IsChecked = viewModel.Settings.ShowOpGgProfileLink;
+        DeepLolProfile.IsChecked = viewModel.Settings.ShowDeepLolProfileLink;
+        DpmLolProfile.IsChecked = viewModel.Settings.ShowDpmLolProfileLink;
+        LeagueOfGraphsProfile.IsChecked = viewModel.Settings.ShowLeagueOfGraphsProfileLink;
         AutomaticUpdates.IsChecked = viewModel.Settings.AutomaticallyCheckForUpdates;
         RefreshUpdateDetails();
         UpdateCacheSize();
@@ -40,9 +45,32 @@ public partial class SettingsWindow : Window
     {
         try
         {
+            bool showExternalProfiles = ExternalProfiles.IsChecked == true;
+            if (showExternalProfiles
+                && OpGgProfile.IsChecked != true
+                && DeepLolProfile.IsChecked != true
+                && DpmLolProfile.IsChecked != true
+                && LeagueOfGraphsProfile.IsChecked != true)
+            {
+                throw new ArgumentException("Select at least one external profile site or turn off third-party profile links.");
+            }
+
             var selection = (ComboBoxItem?)AutoLock.SelectedItem;
             int? minutes = Equals(selection?.Tag, "never") ? null : int.TryParse(selection?.Tag?.ToString(), out int value) ? value : 10;
-            await _viewModel.SaveSettingsAsync(new AppSettings { AutoLockMinutes = minutes, LockOnSessionLockOrSleep = SessionLock.IsChecked == true, LeagueInstallDirectory = string.IsNullOrWhiteSpace(LeaguePath.Text) ? null : LeaguePath.Text.Trim(), DownloadCommunityDragonArtwork = CommunityDragonDownloads.IsChecked == true, AutomaticallyCheckForUpdates = AutomaticUpdates.IsChecked == true, LastUpdateCheckAtUtc = _viewModel.Settings.LastUpdateCheckAtUtc });
+            await _viewModel.SaveSettingsAsync(new AppSettings
+            {
+                AutoLockMinutes = minutes,
+                LockOnSessionLockOrSleep = SessionLock.IsChecked == true,
+                LeagueInstallDirectory = string.IsNullOrWhiteSpace(LeaguePath.Text) ? null : LeaguePath.Text.Trim(),
+                DownloadCommunityDragonArtwork = CommunityDragonDownloads.IsChecked == true,
+                ShowExternalProfileLinks = showExternalProfiles,
+                ShowOpGgProfileLink = OpGgProfile.IsChecked == true,
+                ShowDeepLolProfileLink = DeepLolProfile.IsChecked == true,
+                ShowDpmLolProfileLink = DpmLolProfile.IsChecked == true,
+                ShowLeagueOfGraphsProfileLink = LeagueOfGraphsProfile.IsChecked == true,
+                AutomaticallyCheckForUpdates = AutomaticUpdates.IsChecked == true,
+                LastUpdateCheckAtUtc = _viewModel.Settings.LastUpdateCheckAtUtc
+            });
             if (CurrentPassword.SecurePassword.Length + NewPassword.SecurePassword.Length + ConfirmPassword.SecurePassword.Length > 0)
             {
                 if (CurrentPassword.SecurePassword.Length == 0 || NewPassword.SecurePassword.Length == 0 || ConfirmPassword.SecurePassword.Length == 0)

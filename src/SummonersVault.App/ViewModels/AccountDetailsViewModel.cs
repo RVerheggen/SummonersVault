@@ -2,14 +2,16 @@
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using SummonersVault.Application.Abstractions;
-using SummonersVault.Core.Models;
+using SummonersVault.Application.ExternalProfiles;
 using SummonersVault.Application.Settings;
+using SummonersVault.Core.Models;
 
 namespace SummonersVault.App.ViewModels;
 
 public sealed partial class AccountDetailsViewModel : ObservableObject, IDisposable
 {
     private readonly VaultAccount _account;
+    private AppSettings _settings;
     private CancellationTokenSource? _debounce;
     [ObservableProperty]
     public partial string ChampionQuery { get; set; } = string.Empty;
@@ -47,8 +49,8 @@ public sealed partial class AccountDetailsViewModel : ObservableObject, IDisposa
     public AccountDetailsViewModel(VaultAccount account, IArtworkService artworkService, AppSettings settings)
     {
         _account = account;
+        _settings = settings;
         ArtworkService = artworkService;
-        AllowCommunityDragon = settings.DownloadCommunityDragonArtwork;
         LootCategories = ["All", "Currencies", "Materials", "Champion shards", "Skin shards", "Other"];
         ChampionCollections = BuildChampionCollections();
         ChampionSortOptions = ["Name", "Mastery level", "Mastery points"];
@@ -60,7 +62,17 @@ public sealed partial class AccountDetailsViewModel : ObservableObject, IDisposa
     public Guid Id => _account.Id;
     public VaultAccount Account => _account;
     public IArtworkService ArtworkService { get; }
-    public bool AllowCommunityDragon { get; }
+    public bool AllowCommunityDragon => _settings.DownloadCommunityDragonArtwork;
+    public bool ShowExternalProfileLinks => _settings.ShowExternalProfileLinks && _settings.HasEnabledExternalProfileProvider;
+    public bool CanOpenExternalProfileLinks => ShowExternalProfileLinks
+        && ExternalProfileLinkBuilder.CanBuild(_account.RiotGameName, _account.RiotTagLine, _account.Region);
+    public string ExternalProfileLinksToolTip => CanOpenExternalProfileLinks
+        ? "Open this account on a third-party League statistics site"
+        : "Sync this account to open external profiles";
+    public bool ShowOpGgProfileLink => _settings.ShowOpGgProfileLink;
+    public bool ShowDeepLolProfileLink => _settings.ShowDeepLolProfileLink;
+    public bool ShowDpmLolProfileLink => _settings.ShowDpmLolProfileLink;
+    public bool ShowLeagueOfGraphsProfileLink => _settings.ShowLeagueOfGraphsProfileLink;
     public string RiotId => string.IsNullOrWhiteSpace(_account.RiotGameName) ? _account.DisplayName : $"{_account.RiotGameName}#{_account.RiotTagLine}";
     public string ProfileLine => $"{_account.Region}  ·  Level {_account.SummonerLevel?.ToString(CultureInfo.CurrentCulture) ?? "not synced"}";
     public string RoleLine => _account.Roles == AccountRole.None ? "No role tags" : _account.Roles.ToString().Replace(",", " ·", StringComparison.Ordinal);
@@ -145,6 +157,19 @@ public sealed partial class AccountDetailsViewModel : ObservableObject, IDisposa
 
     public void SelectChampion(ChampionGalleryItem champion) => SelectedChampion = champion;
     public void ShowChampionGallery() => SelectedChampion = null;
+
+    public void UpdateSettings(AppSettings settings)
+    {
+        _settings = settings;
+        OnPropertyChanged(nameof(AllowCommunityDragon));
+        OnPropertyChanged(nameof(ShowExternalProfileLinks));
+        OnPropertyChanged(nameof(CanOpenExternalProfileLinks));
+        OnPropertyChanged(nameof(ExternalProfileLinksToolTip));
+        OnPropertyChanged(nameof(ShowOpGgProfileLink));
+        OnPropertyChanged(nameof(ShowDeepLolProfileLink));
+        OnPropertyChanged(nameof(ShowDpmLolProfileLink));
+        OnPropertyChanged(nameof(ShowLeagueOfGraphsProfileLink));
+    }
 
     public void UpdateGalleryViewport(double availableWidth)
     {

@@ -1,9 +1,12 @@
 ﻿using System.ComponentModel;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Threading;
 using SummonersVault.App.Services;
 using SummonersVault.App.ViewModels;
 using SummonersVault.Application.Abstractions;
+using SummonersVault.Application.ExternalProfiles;
 using SummonersVault.Core.Models;
 
 namespace SummonersVault.App;
@@ -12,12 +15,17 @@ public partial class AccountDetailsWindow : Window
 {
     private readonly MainViewModel _main;
     private readonly IArtworkService _artwork;
+    private readonly IExternalProfileLauncher _externalProfileLauncher;
     private AccountDetailsViewModel _details;
     private readonly DispatcherTimer _galleryResizeTimer;
 
-    public AccountDetailsWindow(MainViewModel main, VaultAccount account, IArtworkService artwork)
+    public AccountDetailsWindow(
+        MainViewModel main,
+        VaultAccount account,
+        IArtworkService artwork,
+        IExternalProfileLauncher externalProfileLauncher)
     {
-        InitializeComponent(); DarkTitleBar.Attach(this); _main = main; _artwork = artwork;
+        InitializeComponent(); DarkTitleBar.Attach(this); _main = main; _artwork = artwork; _externalProfileLauncher = externalProfileLauncher;
         _galleryResizeTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
         _galleryResizeTimer.Tick += GalleryResizeTimer_Tick;
         SizeChanged += AccountDetailsWindow_SizeChanged;
@@ -52,6 +60,46 @@ public partial class AccountDetailsWindow : Window
     private async void CopyUsername_Click(object sender, RoutedEventArgs e) => await _main.CopyLoginAsync(_details.Id);
     private async void CopyPassword_Click(object sender, RoutedEventArgs e) => await _main.CopyPasswordAsync(_details.Id);
     private async void OpenLeague_Click(object sender, RoutedEventArgs e) => await _main.LaunchAsync(_details.Id);
+    private void ViewStats_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { ContextMenu: { } menu } button)
+        {
+            return;
+        }
+
+        menu.PlacementTarget = button;
+        menu.Placement = PlacementMode.Bottom;
+        menu.IsOpen = !menu.IsOpen;
+    }
+
+    private void OpenExternalProfile_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: ExternalProfileProvider provider }
+            || !_main.Settings.ShowExternalProfileLinks
+            || !_main.Settings.IsExternalProfileProviderEnabled(provider))
+        {
+            return;
+        }
+
+        VaultAccount account = _details.Account;
+        if (!ExternalProfileLinkBuilder.TryBuild(
+            provider,
+            account.RiotGameName,
+            account.RiotTagLine,
+            account.Region,
+            out ExternalProfileLink? profileLink))
+        {
+            MessageBox.Show(this, "Sync this account before opening an external profile.", "Profile unavailable", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        ExternalProfileLaunchResult result = _externalProfileLauncher.Open(profileLink.Uri);
+        if (!result.Succeeded)
+        {
+            MessageBox.Show(this, result.ErrorMessage, $"Unable to open {profileLink.ProviderName}", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
     private async void Sync_Click(object sender, RoutedEventArgs e)
     {
         _details.SynchronizationStatus = "Synchronizing League account...";
@@ -151,6 +199,10 @@ public partial class AccountDetailsWindow : Window
         if (e.PropertyName == nameof(MainViewModel.IsVault) && !_main.IsVault)
         {
             Close();
+        }
+        else if (e.PropertyName == nameof(MainViewModel.Settings))
+        {
+            _details.UpdateSettings(_main.Settings);
         }
     }
     protected override void OnClosed(EventArgs e) { _galleryResizeTimer.Stop(); SizeChanged -= AccountDetailsWindow_SizeChanged; _main.PropertyChanged -= MainPropertyChanged; _main.ChampionProgressionUpdated -= ChampionProgressionUpdated; _main.ChampionProgressionSynchronizationFinished -= ChampionProgressionSynchronizationFinished; _details.Dispose(); base.OnClosed(e); }

@@ -29,6 +29,20 @@
                             <StackPanel><TextBlock Text="LEAGUE CLIENT" Foreground="{StaticResource HighlightBrush}" FontWeight="SemiBold"/><TextBlock Text="Riot Games installation folder (optional)" Margin="0,16,0,6"/><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox x:Name="LeaguePath" AutomationProperties.Name="Riot Games installation folder"/><Button Grid.Column="1" Content="Browse…" Margin="10,0,0,0" Click="Browse_Click"/></Grid><TextBlock Text="Choose the Riot Games, Riot Client, or League of Legends folder. Leave blank for automatic discovery." Style="{StaticResource MutedText}" FontSize="11" Margin="0,7,0,0" TextWrapping="Wrap"/></StackPanel>
                         </Border>
                         <Border Background="{StaticResource SurfaceRaisedBrush}" BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="12" Padding="20" Margin="0,14,0,0">
+                            <StackPanel>
+                                <TextBlock Text="EXTERNAL PROFILES" Foreground="{StaticResource HighlightBrush}" FontWeight="SemiBold"/>
+                                <CheckBox x:Name="ExternalProfiles" Content="Show third-party profile links" AutomationProperties.Name="Show third-party profile links" Margin="0,14,0,0"/>
+                                <WrapPanel Margin="20,5,0,0" IsEnabled="{Binding IsChecked, ElementName=ExternalProfiles}">
+                                    <CheckBox x:Name="DeepLolProfile" Content="DeepLoL" AutomationProperties.Name="Include DeepLoL profile link" Margin="0,5,22,5"/>
+                                    <CheckBox x:Name="DpmLolProfile" Content="DPM.LOL" AutomationProperties.Name="Include DPM.LOL profile link" Margin="0,5,22,5"/>
+                                    <CheckBox x:Name="LeagueOfGraphsProfile" Content="LeagueOfGraphs" AutomationProperties.Name="Include LeagueOfGraphs profile link" Margin="0,5,22,5"/>
+                                    <CheckBox x:Name="OpGgProfile" Content="OP.GG" AutomationProperties.Name="Include OP.GG profile link" Margin="0,5,0,5"/>
+                                </WrapPanel>
+                                <TextBlock Text="Choosing a link opens the public Riot ID and region in your default browser. The website receives normal browser information such as your IP address. SummonersVault does not send credentials, PUUIDs, vault data, or your League login username." Style="{StaticResource MutedText}" FontSize="11" Margin="0,7,0,0" TextWrapping="Wrap"/>
+                                <TextBlock Text="SummonersVault is not affiliated with or endorsed by these independent third-party services." Style="{StaticResource MutedText}" FontSize="11" Margin="0,5,0,0" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Background="{StaticResource SurfaceRaisedBrush}" BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="12" Padding="20" Margin="0,14,0,0">
                             <StackPanel><TextBlock Text="ARTWORK" Foreground="{StaticResource HighlightBrush}" FontWeight="SemiBold"/><CheckBox x:Name="CommunityDragonDownloads" Content="Download public artwork from CommunityDragon" AutomationProperties.Name="Download public artwork from CommunityDragon" Margin="0,14,0,0"/><TextBlock Text="Public asset paths only. No account identifiers or credentials are sent." Style="{StaticResource MutedText}" Margin="0,6,0,0"/><TextBlock x:Name="CacheSize" Style="{StaticResource MutedText}" Margin="0,8,0,8"/><Button Content="Clear artwork cache" AutomationProperties.Name="Clear artwork cache" Click="ClearArtwork_Click" HorizontalAlignment="Left"/></StackPanel>
                         </Border>
                         <Border Background="{StaticResource SurfaceRaisedBrush}" BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="12" Padding="20" Margin="0,14,0,0">

@@ -8,6 +8,7 @@ using SummonersVault.Application.League;
 using SummonersVault.Application.Vault;
 using SummonersVault.Application.Settings;
 using SummonersVault.Application.Backup;
+using SummonersVault.Application.ExternalProfiles;
 using SummonersVault.Infrastructure.Backup;
 using SummonersVault.Infrastructure.Artwork;
 using SummonersVault.Infrastructure.League;
@@ -41,7 +42,8 @@ public partial class App : System.Windows.Application
         });
         MainViewModel viewModel = _serviceProvider.GetRequiredService<MainViewModel>();
         IArtworkService artwork = _serviceProvider.GetRequiredService<IArtworkService>();
-        var window = new MainWindow(viewModel, artwork);
+        IExternalProfileLauncher externalProfileLauncher = _serviceProvider.GetRequiredService<IExternalProfileLauncher>();
+        var window = new MainWindow(viewModel, artwork, externalProfileLauncher);
         MainWindow = window;
         window.Show();
         await viewModel.InitializeAsync();
@@ -81,6 +83,7 @@ public partial class App : System.Windows.Application
         services.AddSingleton<SafeClipboardService>(_ => new SafeClipboardService(Dispatcher));
         services.AddSingleton<ArtworkCacheService>();
         services.AddSingleton<IArtworkService>(provider => provider.GetRequiredService<ArtworkCacheService>());
+        services.AddSingleton<IExternalProfileLauncher, ExternalProfileLauncher>();
         services.AddSingleton<IUpdateService, VelopackUpdateService>();
         services.AddSingleton(provider => new MainViewModel(
             provider.GetRequiredService<VaultService>(),
