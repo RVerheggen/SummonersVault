@@ -1,14 +1,10 @@
-# SummonersVault 1.1.0
+# SummonersVault 1.1.1
 
-Champion collections now provide a much richer view of your League progress.
+This update refines the account details window and makes better use of the available space.
 
-- See mastery level, mastery points, Eternal milestones, and illuminated Eternals directly on champion cards.
-- Open any champion for a detailed progression view with mastery progress, Eternal sets, milestone values, personal bests, and clear Featured, Complete, and Legacy labels.
-- Browse current and League Classic champions in separate collections, so alternate Classic versions no longer appear as unexplained duplicates.
-- Sort champions by name, mastery level, or mastery points in either direction.
-- Enjoy a responsive champion gallery that shows two, three, or four columns based on the window size.
-- Get faster synchronization feedback. Core account information, ranks, champions, skins, currencies, crafting items, and match history appear first while mastery and Eternals continue in the background.
-- Follow synchronization progress from the account details window without returning to the vault dashboard.
-- Benefit from refined champion cards, compact Classic labels, complete highlighted borders, and a larger splash-art progression header.
-- Start typing your master password immediately when SummonersVault opens.
-- Existing encrypted vaults and backups remain compatible and are upgraded automatically when needed.
+- Browse skins, ranked queues, and crafting items in responsive layouts that adapt to the window width.
+- See up to four champion, skin, or ranked cards per row on wider windows.
+- Browse crafting items in a comfortable two or three-column layout with more room for item names and values.
+- Enjoy cleaner scrolling without unwanted sideways overflow or bright scrollbar corners.
+- See currency balances and account form values aligned more consistently within their controls.
+- Benefit from small layout and presentation improvements throughout the account details experience.
