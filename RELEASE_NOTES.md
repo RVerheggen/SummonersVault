@@ -1,9 +1,10 @@
-# SummonersVault 1.2.0
+# SummonersVault 1.3.0
 
-This update adds quick access to detailed League statistics for your synchronized accounts.
+This update gives secondary windows and empty account views a clearer, more consistent SummonersVault experience.
 
-- Open a synchronized account directly on DeepLoL, DPM.LOL, LeagueOfGraphs, or OP.GG from the new View stats menu.
-- Choose which statistics sites appear, or disable external profile links completely, from Settings.
-- Use a clean, themed provider menu from anywhere in the account details window.
-- Continue safely when an account has not been synchronized yet, with a clear explanation instead of an unusable link.
-- Keep credentials and private vault data inside SummonersVault. Only the public Riot ID and region are included in links you explicitly open.
+- Use newly themed About and Import / Export windows that match the rest of the application.
+- Export or import encrypted backups through clearer separate actions, inline progress, friendly errors, and a safer conflict choice screen.
+- See helpful explanations in Champions, Skins, Ranked, and Crafting when an account has not been synchronized or a search has no matches.
+- Read longer descriptions properly inside cards without text being cut off.
+- Return from Settings, About, or Import / Export without a sidebar button incorrectly remaining highlighted.
+- Benefit from more consistent region, rank, currency, and League Client handling throughout the application.
