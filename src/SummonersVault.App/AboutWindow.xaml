@@ -1,0 +1,76 @@
+<Window x:Class="SummonersVault.App.AboutWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="About SummonersVault"
+        Width="660" Height="650" MinWidth="560" MinHeight="560"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Style="{StaticResource AppWindow}">
+    <Grid Background="{StaticResource BackgroundBrush}" Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="4,4,4,24">
+                    <Border Width="68" Height="68" Background="{StaticResource SurfaceMutedBrush}"
+                            BorderBrush="{StaticResource HighlightBrush}" BorderThickness="1" CornerRadius="16">
+                        <Image Source="{StaticResource AppIconImage}" Width="52" Height="52"
+                               AutomationProperties.Name="SummonersVault application icon"/>
+                    </Border>
+                    <StackPanel Margin="18,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="SummonersVault" FontSize="28" FontWeight="SemiBold"/>
+                        <TextBlock x:Name="VersionText" Style="{StaticResource MutedText}" Margin="0,4,0,0"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <Border Style="{StaticResource Panel}" Margin="0,0,0,14">
+                    <StackPanel>
+                        <TextBlock Text="LOCAL LEAGUE VAULT" Foreground="{StaticResource HighlightBrush}"
+                                   FontSize="11" FontWeight="SemiBold"/>
+                        <TextBlock Text="A private password manager and read-only League companion built for Windows."
+                                   FontSize="18" FontWeight="SemiBold" Margin="0,10,0,12"/>
+                        <TextBlock Style="{StaticResource MutedText}"
+                                   Text="Your vault stays on this computer. SummonersVault never submits credentials to Riot and only reads League data after you sign in through the official client."/>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource Panel}" Margin="0,0,0,14">
+                    <StackPanel>
+                        <TextBlock Text="DESIGNED AROUND YOUR PRIVACY" Foreground="{StaticResource HighlightBrush}"
+                                   FontSize="11" FontWeight="SemiBold" Margin="0,0,0,12"/>
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="18"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                            <TextBlock Text="◇" Foreground="{StaticResource HighlightBrush}" FontWeight="SemiBold"/>
+                            <TextBlock Grid.Column="1" Text="Local encrypted storage with no cloud account or telemetry."/>
+                        </Grid>
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="18"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                            <TextBlock Text="◇" Foreground="{StaticResource HighlightBrush}" FontWeight="SemiBold"/>
+                            <TextBlock Grid.Column="1" Text="Read-only League Client integration with no automated login."/>
+                        </Grid>
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="18"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                            <TextBlock Text="◇" Foreground="{StaticResource HighlightBrush}" FontWeight="SemiBold"/>
+                            <TextBlock Grid.Column="1" Text="Free and open-source software licensed under GPLv3."/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <Border Background="{StaticResource SurfaceMutedBrush}" BorderBrush="{StaticResource BorderSubtleBrush}"
+                        BorderThickness="1" CornerRadius="12" Padding="18">
+                    <StackPanel>
+                        <TextBlock Text="FAN PROJECT NOTICE" Foreground="{StaticResource HighlightBrush}"
+                                   FontSize="11" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                        <TextBlock Style="{StaticResource MutedText}"
+                                   Text="SummonersVault isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games and all associated properties are trademarks or registered trademarks of Riot Games, Inc."/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <Button x:Name="CloseButton" Grid.Row="1" Content="Close" IsCancel="True" HorizontalAlignment="Right" Margin="0,18,0,0"
+                AutomationProperties.Name="Close About SummonersVault"/>
+    </Grid>
+</Window>

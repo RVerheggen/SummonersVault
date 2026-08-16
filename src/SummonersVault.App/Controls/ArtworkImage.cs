@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using SummonersVault.Application.Abstractions;
+using SummonersVault.App.Themes;
 
 namespace SummonersVault.App.Controls;
 
@@ -18,8 +19,8 @@ public sealed class ArtworkImage : Grid
 
     public ArtworkImage()
     {
-        Background = (Brush)System.Windows.Application.Current.FindResource("SurfaceMutedBrush");
-        Children.Add(new TextBlock { Text = "◇", FontSize = 28, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Foreground = (Brush)System.Windows.Application.Current.FindResource("HighlightBrush") });
+        Background = (Brush)System.Windows.Application.Current.FindResource(ThemeResourceKeys.SurfaceMutedBrush);
+        Children.Add(new TextBlock { Text = "◇", FontSize = 28, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Foreground = (Brush)System.Windows.Application.Current.FindResource(ThemeResourceKeys.HighlightBrush) });
         Children.Add(_image);
         Loaded += (_, _) => { AttachHostClip(); StartLoad(); };
         Unloaded += (_, _) => { CancelLoad(); DetachHostClip(); };

@@ -41,6 +41,8 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     private bool _pendingSignInNotified;
     private bool _clientStatusUpdateInProgress;
 
+    public IReadOnlyList<string> RegionFilterOptions { get; } = ["Any region", .. LeagueRegion.Supported];
+
     internal MainViewModel(
         VaultService vault,
         AccountService accountService,
@@ -615,8 +617,15 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     {
         Accounts.Clear();
         MatchHistoryState? syncState = SyncFilterIndex switch { 1 => MatchHistoryState.Known, 2 => MatchHistoryState.NeverPlayed, 3 => MatchHistoryState.Unknown, 4 => MatchHistoryState.Stale, _ => (MatchHistoryState?)null };
-        string? region = RegionFilterIndex switch { 1 => "EUW", 2 => "EUNE", 3 => "NA", 4 => "KR", 5 => "BR", 6 => "JP", 7 => "LAN", 8 => "LAS", 9 => "OCE", 10 => "TR", _ => null };
-        string? queue = QueueFilterIndex switch { 1 => "RANKED_SOLO_5x5", 2 => "RANKED_FLEX_SR", _ => null };
+        string? region = RegionFilterIndex > 0 && RegionFilterIndex <= LeagueRegion.Supported.Count
+            ? LeagueRegion.Supported[RegionFilterIndex - 1]
+            : null;
+        string? queue = QueueFilterIndex switch
+        {
+            1 => LeagueQueueType.RankedSoloDuo,
+            2 => LeagueQueueType.RankedFlex,
+            _ => null
+        };
         var facets = new AccountFilter(region, queue, RankFilter, SelectedRoleFilters, ChampionFilter, SkinFilter, syncState);
         foreach (VaultAccount account in AccountSearch.Apply(_accounts, Query, SortRecentlyPlayed ? AccountSort.RecentlyPlayed : AccountSort.Name, facets))
         {

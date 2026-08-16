@@ -5,20 +5,6 @@ namespace SummonersVault.Application.ExternalProfiles;
 
 public static class ExternalProfileLinkBuilder
 {
-    private static readonly HashSet<string> SupportedRegions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "BR",
-        "EUNE",
-        "EUW",
-        "JP",
-        "KR",
-        "LAN",
-        "LAS",
-        "NA",
-        "OCE",
-        "TR"
-    };
-
     public static bool CanBuild(string? gameName, string? tagLine, string? region) =>
         TryBuild(ExternalProfileProvider.OpGg, gameName, tagLine, region, out _);
 
@@ -35,7 +21,7 @@ public static class ExternalProfileLinkBuilder
         string normalizedRegion = LeagueRegion.Normalize(region);
         if (normalizedGameName.Length == 0
             || normalizedTagLine.Length == 0
-            || !SupportedRegions.Contains(normalizedRegion))
+            || !LeagueRegion.IsSupported(normalizedRegion))
         {
             return false;
         }
@@ -105,5 +91,5 @@ public static class ExternalProfileLinkBuilder
         _ => string.Empty
     };
 
-    private static bool IsSupportedRegionSegment(string region) => SupportedRegions.Contains(region);
+    private static bool IsSupportedRegionSegment(string region) => LeagueRegion.IsSupported(region);
 }

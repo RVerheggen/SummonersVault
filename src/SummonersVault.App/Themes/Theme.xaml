@@ -18,7 +18,7 @@
         <Setter Property="Background" Value="{StaticResource BackgroundBrush}"/><Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/><Setter Property="Icon" Value="{StaticResource AppIconImage}"/><Setter Property="FontFamily" Value="Segoe UI Variable, Segoe UI"/><Setter Property="TextOptions.TextFormattingMode" Value="Display"/>
     </Style>
     <Style TargetType="TextBlock"><Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/><Setter Property="TextWrapping" Value="Wrap"/></Style>
-    <Style x:Key="MutedText" TargetType="TextBlock"><Setter Property="Foreground" Value="{StaticResource MutedForegroundBrush}"/></Style>
+    <Style x:Key="MutedText" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}"><Setter Property="Foreground" Value="{StaticResource MutedForegroundBrush}"/></Style>
     <Style x:Key="SectionHeading" TargetType="TextBlock"><Setter Property="FontSize" Value="20"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Margin" Value="0,0,0,12"/></Style>
     <Style x:Key="GoldFocusVisual">
         <Setter Property="Control.Template"><Setter.Value><ControlTemplate><Border BorderBrush="{StaticResource HighlightBrush}" BorderThickness="2" CornerRadius="10" Margin="1"/></ControlTemplate></Setter.Value></Setter>

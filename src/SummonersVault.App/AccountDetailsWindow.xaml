@@ -78,6 +78,11 @@
                 </DataTemplate>
               </ListBox.ItemTemplate>
             </ListBox>
+            <controls:EmptyStatePanel Grid.Row="4"
+                                      Title="{Binding ChampionEmptyTitle}"
+                                      Message="{Binding ChampionEmptyMessage}"
+                                      Visibility="{Binding IsChampionEmptyStateVisible, Converter={StaticResource BooleanVisibility}}"
+                                      AutomationProperties.Name="Champion collection empty state"/>
           </Grid>
           <ScrollViewer Visibility="{Binding IsChampionProgressionVisible, Converter={StaticResource BooleanVisibility}}" VerticalScrollBarVisibility="Auto">
             <StackPanel Margin="0,0,12,0">
@@ -136,10 +141,16 @@
               </DataTemplate>
             </ListBox.ItemTemplate>
           </ListBox>
+          <controls:EmptyStatePanel Grid.Row="2"
+                                    Title="{Binding SkinEmptyTitle}"
+                                    Message="{Binding SkinEmptyMessage}"
+                                    Visibility="{Binding IsSkinEmptyStateVisible, Converter={StaticResource BooleanVisibility}}"
+                                    AutomationProperties.Name="Skin collection empty state"/>
         </Grid>
       </TabItem>
       <TabItem Header="Ranked">
-        <ListBox ItemsSource="{Binding RankRows}" Margin="20" Background="{StaticResource TransparentBrush}" BorderThickness="0" HorizontalContentAlignment="Stretch" ScrollViewer.CanContentScroll="True" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
+        <Grid Margin="20">
+        <ListBox ItemsSource="{Binding RankRows}" Background="{StaticResource TransparentBrush}" BorderThickness="0" HorizontalContentAlignment="Stretch" ScrollViewer.CanContentScroll="True" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
           <ListBox.ItemTemplate>
             <DataTemplate>
               <ItemsControl ItemsSource="{Binding Items}" Margin="0,0,0,12">
@@ -166,6 +177,11 @@
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>
+        <controls:EmptyStatePanel Title="{Binding RankedEmptyTitle}"
+                                  Message="{Binding RankedEmptyMessage}"
+                                  Visibility="{Binding IsRankedEmptyStateVisible, Converter={StaticResource BooleanVisibility}}"
+                                  AutomationProperties.Name="Ranked data empty state"/>
+        </Grid>
       </TabItem>
       <TabItem Header="Crafting">
         <Grid Margin="20">
@@ -206,6 +222,11 @@
               </DataTemplate>
             </ListBox.ItemTemplate>
           </ListBox>
+          <controls:EmptyStatePanel Grid.Row="4"
+                                    Title="{Binding CraftingEmptyTitle}"
+                                    Message="{Binding CraftingEmptyMessage}"
+                                    Visibility="{Binding IsCraftingEmptyStateVisible, Converter={StaticResource BooleanVisibility}}"
+                                    AutomationProperties.Name="Crafting inventory empty state"/>
         </Grid>
       </TabItem>
     </TabControl>

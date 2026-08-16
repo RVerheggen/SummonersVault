@@ -170,8 +170,8 @@ public partial class MainWindow : Window
     {
         _viewModel?.SortRecentlyPlayed = ((ComboBox)sender).SelectedIndex == 1;
     }
-    private void Settings_Click(object sender, RoutedEventArgs e) => new SettingsWindow(_viewModel) { Owner = this }.ShowDialog();
-    private void About_Click(object sender, RoutedEventArgs e) => MessageBox.Show(this, $"SummonersVault {_viewModel.CurrentVersion}\n\nSummonersVault is a free, local-only community password manager and League companion.\n\nSummonersVault isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games and all associated properties are trademarks or registered trademarks of Riot Games, Inc.\n\nNo credentials are sent to Riot by this app.", "About SummonersVault", MessageBoxButton.OK, MessageBoxImage.Information);
+    private void Settings_Click(object sender, RoutedEventArgs e) => ShowOwnedDialog(new SettingsWindow(_viewModel));
+    private void About_Click(object sender, RoutedEventArgs e) => ShowOwnedDialog(new AboutWindow(_viewModel.CurrentVersion));
 
     internal async void BeginAutomaticUpdateCheck()
     {
@@ -193,53 +193,20 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void Backup_Click(object sender, RoutedEventArgs e)
+    private void Backup_Click(object sender, RoutedEventArgs e) => ShowOwnedDialog(new BackupWindow(_viewModel));
+
+    private void ShowOwnedDialog(Window dialog)
     {
-        MessageBoxResult direction = MessageBox.Show(this, "Choose Yes to export a backup, or No to import one.", "Import / Export", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
-        if (direction == MessageBoxResult.Cancel)
-        {
-            return;
-        }
+        FocusShell();
+        dialog.Owner = this;
+        dialog.ShowDialog();
+        _ = Dispatcher.InvokeAsync(FocusShell, DispatcherPriority.Input);
+    }
 
-        try
-        {
-            if (direction == MessageBoxResult.Yes)
-            {
-                var save = new SaveFileDialog { Filter = "SummonersVault backup (*.svault)|*.svault", AddExtension = true, DefaultExt = ".svault", FileName = $"SummonersVault-{DateTime.Now:yyyy-MM-dd}.svault" };
-                if (save.ShowDialog(this) != true)
-                {
-                    return;
-                }
-
-                await _viewModel.Backup.ExportAsync(save.FileName); MessageBox.Show(this, "Encrypted backup exported.", "Backup", MessageBoxButton.OK, MessageBoxImage.Information); return;
-            }
-            var open = new OpenFileDialog { Filter = "SummonersVault backup (*.svault)|*.svault", CheckFileExists = true };
-            if (open.ShowDialog(this) != true)
-            {
-                return;
-            }
-
-            var prompt = new PasswordPromptWindow { Owner = this }; if (prompt.ShowDialog() != true)
-            {
-                return;
-            }
-
-            byte[] password = SecurePasswordBytes.From(prompt.SecurePassword);
-            BackupImportPreview preview;
-            try { preview = await _viewModel.Backup.PreviewImportAsync(open.FileName, password); }
-            finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(password); }
-            await using (preview)
-            {
-                var choices = new Dictionary<Guid, BackupConflictChoice>();
-                foreach (BackupConflict conflict in preview.Conflicts)
-                {
-                    MessageBoxResult choice = MessageBox.Show(this, $"{conflict.DisplayName} already exists.\n\nYes: use imported\nNo: keep current", "Import conflict", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No);
-                    choices[conflict.ImportedId] = choice == MessageBoxResult.Yes ? BackupConflictChoice.UseImported : BackupConflictChoice.KeepCurrent;
-                }
-                await _viewModel.Backup.ImportAsync(preview, choices); await _viewModel.RefreshAsync(); MessageBox.Show(this, "Backup merged into this vault.", "Import", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-        }
-        catch (Exception ex) when (ex is InvalidDataException or UnauthorizedAccessException or IOException or ArgumentException) { MessageBox.Show(this, ex.Message, "Import / Export", MessageBoxButton.OK, MessageBoxImage.Warning); }
+    private void FocusShell()
+    {
+        FocusManager.SetFocusedElement(this, ShellFocusTarget);
+        Keyboard.Focus(ShellFocusTarget);
     }
 
     private void MarkActive() => _lastActivity = DateTimeOffset.UtcNow;

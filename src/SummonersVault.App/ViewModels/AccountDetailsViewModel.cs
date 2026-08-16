@@ -10,6 +10,15 @@ namespace SummonersVault.App.ViewModels;
 
 public sealed partial class AccountDetailsViewModel : ObservableObject, IDisposable
 {
+    private const string CurrentChampionsCollection = "Current champions";
+    private const string LeagueClassicCollection = "League Classic";
+    private const string OtherChampionsCollection = "Other";
+    private const string NameSort = "Name";
+    private const string MasteryLevelSort = "Mastery level";
+    private const string MasteryPointsSort = "Mastery points";
+    private const string AscendingSortDirection = "Ascending";
+    private const string DescendingSortDirection = "Descending";
+
     private readonly VaultAccount _account;
     private AppSettings _settings;
     private CancellationTokenSource? _debounce;
@@ -17,13 +26,13 @@ public sealed partial class AccountDetailsViewModel : ObservableObject, IDisposa
     public partial string ChampionQuery { get; set; } = string.Empty;
 
     [ObservableProperty]
-    public partial string ChampionCollection { get; set; } = "Current champions";
+    public partial string ChampionCollection { get; set; } = CurrentChampionsCollection;
 
     [ObservableProperty]
-    public partial string ChampionSort { get; set; } = "Name";
+    public partial string ChampionSort { get; set; } = NameSort;
 
     [ObservableProperty]
-    public partial string ChampionSortDirection { get; set; } = "Ascending";
+    public partial string ChampionSortDirection { get; set; } = AscendingSortDirection;
 
     [ObservableProperty]
     public partial int GalleryColumnCount { get; set; } = 3;
@@ -41,7 +50,7 @@ public sealed partial class AccountDetailsViewModel : ObservableObject, IDisposa
     public partial string LootQuery { get; set; } = string.Empty;
 
     [ObservableProperty]
-    public partial string LootCategory { get; set; } = "All";
+    public partial string LootCategory { get; set; } = CraftingLootCategory.All;
 
     [ObservableProperty]
     public partial string SynchronizationStatus { get; set; } = string.Empty;
@@ -51,10 +60,18 @@ public sealed partial class AccountDetailsViewModel : ObservableObject, IDisposa
         _account = account;
         _settings = settings;
         ArtworkService = artworkService;
-        LootCategories = ["All", "Currencies", "Materials", "Champion shards", "Skin shards", "Other"];
+        LootCategories =
+        [
+            CraftingLootCategory.All,
+            CraftingLootCategory.Currencies,
+            CraftingLootCategory.Materials,
+            CraftingLootCategory.ChampionShards,
+            CraftingLootCategory.SkinShards,
+            CraftingLootCategory.Other
+        ];
         ChampionCollections = BuildChampionCollections();
-        ChampionSortOptions = ["Name", "Mastery level", "Mastery points"];
-        ChampionSortDirections = ["Ascending", "Descending"];
+        ChampionSortOptions = [NameSort, MasteryLevelSort, MasteryPointsSort];
+        ChampionSortDirections = [AscendingSortDirection, DescendingSortDirection];
         BuildRankRows();
         ApplyFilters();
     }
@@ -79,8 +96,8 @@ public sealed partial class AccountDetailsViewModel : ObservableObject, IDisposa
     public string LastPlayed => _account.MatchHistoryState switch { MatchHistoryState.NeverPlayed => "Never played", MatchHistoryState.Stale => $"Last played {_account.LastMatchPlayedAtUtc?.ToLocalTime():g} · data may be stale", MatchHistoryState.Known => $"Last played {_account.LastMatchPlayedAtUtc?.ToLocalTime():g}", _ => "Match history not synced" };
     public string RiotPoints => _account.RiotPoints?.ToString("N0", CultureInfo.CurrentCulture) ?? "Not synced";
     public string BlueEssence => _account.BlueEssence?.ToString("N0", CultureInfo.CurrentCulture) ?? "Not synced";
-    public string OrangeEssence => CurrencyTotal("CURRENCY_cosmetic");
-    public string MythicEssence => CurrencyTotal("CURRENCY_mythic", "Mythic Essence");
+    public string OrangeEssence => CurrencyTotal(CraftingCurrency.OrangeEssence);
+    public string MythicEssence => CurrencyTotal(CraftingCurrency.MythicEssence, "Mythic Essence");
     public string Notes => string.IsNullOrWhiteSpace(_account.Notes) ? "No notes for this account." : _account.Notes;
     public string OwnershipSummary => $"{CurrentChampionCount} current champions · {ClassicChampionCount} League Classic champions · {_account.Skins.Count} skins · {_account.LootItems.Count} crafting entries";
     public string SyncSummary => _account.LastSyncedAtUtc is { } value ? $"Last synchronized {value.ToLocalTime():g}" : "League data has not been synchronized.";
@@ -105,6 +122,64 @@ public sealed partial class AccountDetailsViewModel : ObservableObject, IDisposa
     public string ChampionCount => $"{Champions.Count} shown";
     public string SkinCount => $"{Skins.Count} shown";
     public string LootCount => $"{Loot.Count} shown";
+    public bool IsChampionEmptyStateVisible => IsChampionGalleryVisible && ChampionRows.Count == 0;
+    public bool IsSkinEmptyStateVisible => SkinRows.Count == 0;
+    public bool IsRankedEmptyStateVisible => RankRows.Count == 0;
+    public bool IsCraftingEmptyStateVisible => LootRows.Count == 0;
+    public string ChampionEmptyTitle => GetSnapshotState(SnapshotCategory.Champions) switch
+    {
+        SnapshotState.Unknown => "Champions not synchronized",
+        SnapshotState.Stale => "Champion data unavailable",
+        _ when !string.IsNullOrWhiteSpace(ChampionQuery) => "No champions found",
+        _ => "No champions in this collection"
+    };
+    public string ChampionEmptyMessage => GetSnapshotState(SnapshotCategory.Champions) switch
+    {
+        SnapshotState.Unknown => "Synchronize this account while signed into League to load its champion collection.",
+        SnapshotState.Stale => "Stored champion data is unavailable. Try synchronizing the account again.",
+        _ when !string.IsNullOrWhiteSpace(ChampionQuery) => "No champions match the current search.",
+        _ => "This account has no champions in the selected collection."
+    };
+    public string SkinEmptyTitle => GetSnapshotState(SnapshotCategory.Skins) switch
+    {
+        SnapshotState.Unknown => "Skins not synchronized",
+        SnapshotState.Stale => "Skin data unavailable",
+        _ when !string.IsNullOrWhiteSpace(SkinQuery) => "No skins found",
+        _ => "No owned skins found"
+    };
+    public string SkinEmptyMessage => GetSnapshotState(SnapshotCategory.Skins) switch
+    {
+        SnapshotState.Unknown => "Synchronize this account while signed into League to load its owned skins.",
+        SnapshotState.Stale => "Stored skin data is unavailable. Try synchronizing the account again.",
+        _ when !string.IsNullOrWhiteSpace(SkinQuery) => "No skins match the current search.",
+        _ => "No non-default owned skins were returned for this account."
+    };
+    public string RankedEmptyTitle => GetSnapshotState(SnapshotCategory.Ranked) switch
+    {
+        SnapshotState.Unknown => "Ranked data not synchronized",
+        SnapshotState.Stale => "Ranked data unavailable",
+        _ => "No ranked queues found"
+    };
+    public string RankedEmptyMessage => GetSnapshotState(SnapshotCategory.Ranked) switch
+    {
+        SnapshotState.Unknown => "Synchronize this account while signed into League to load its ranked statistics.",
+        SnapshotState.Stale => "Stored ranked data may be out of date. Try synchronizing the account again.",
+        _ => "No ranked queue statistics were returned for this account."
+    };
+    public string CraftingEmptyTitle => GetSnapshotState(SnapshotCategory.Crafting) switch
+    {
+        SnapshotState.Unknown => "Crafting not synchronized",
+        SnapshotState.Stale => "Crafting data unavailable",
+        _ when HasCraftingFilter => "No crafting items found",
+        _ => "Crafting inventory is empty"
+    };
+    public string CraftingEmptyMessage => GetSnapshotState(SnapshotCategory.Crafting) switch
+    {
+        SnapshotState.Unknown => "Synchronize this account while signed into League to load its crafting inventory.",
+        SnapshotState.Stale => "Stored crafting data may be out of date. Try synchronizing the account again.",
+        _ when HasCraftingFilter => "No crafting items match the current search or category.",
+        _ => "No nonzero crafting items were returned for this account."
+    };
 
     partial void OnChampionQueryChanged(string value) => Debounce();
     partial void OnChampionCollectionChanged(string value) => ApplyChampionFilter();
@@ -121,6 +196,7 @@ public sealed partial class AccountDetailsViewModel : ObservableObject, IDisposa
     {
         OnPropertyChanged(nameof(IsChampionGalleryVisible));
         OnPropertyChanged(nameof(IsChampionProgressionVisible));
+        OnPropertyChanged(nameof(IsChampionEmptyStateVisible));
     }
     partial void OnSkinQueryChanged(string value) => Debounce();
     partial void OnLootQueryChanged(string value) => Debounce();
@@ -145,7 +221,7 @@ public sealed partial class AccountDetailsViewModel : ObservableObject, IDisposa
         }
 
         Loot.Clear();
-        foreach (CraftingGalleryItem? item in _account.LootItems.Select(CreateCraftingItem).Where(x => (LootCategory == "All" || x.Category.Equals(LootCategory, StringComparison.OrdinalIgnoreCase)) && (Contains(x.Name, LootQuery) || Contains(x.Item.LocalizedDescription, LootQuery))).OrderBy(x => x.Name))
+        foreach (CraftingGalleryItem? item in _account.LootItems.Select(CreateCraftingItem).Where(x => (LootCategory == CraftingLootCategory.All || x.Category.Equals(LootCategory, StringComparison.OrdinalIgnoreCase)) && (Contains(x.Name, LootQuery) || Contains(x.Item.LocalizedDescription, LootQuery))).OrderBy(x => x.Name))
         {
             Loot.Add(item);
         }
@@ -181,8 +257,8 @@ public sealed partial class AccountDetailsViewModel : ObservableObject, IDisposa
     {
         ChampionVariant variant = ChampionCollection switch
         {
-            "League Classic" => ChampionVariant.LeagueClassic,
-            "Other" => ChampionVariant.Unknown,
+            LeagueClassicCollection => ChampionVariant.LeagueClassic,
+            OtherChampionsCollection => ChampionVariant.Unknown,
             _ => ChampionVariant.Current
         };
         Dictionary<int, ChampionMastery> masteries = _account.ChampionMasteries.ToDictionary(mastery => mastery.ChampionId);
@@ -196,13 +272,13 @@ public sealed partial class AccountDetailsViewModel : ObservableObject, IDisposa
                     [.. _account.Eternals.Where(eternal => eternal.ChampionId == champion.ChampionId && eternal.SetId == set.SetId).OrderBy(eternal => eternal.Name).Select(eternal => new EternalGalleryItem(eternal))]))],
                 masteryState,
                 eternalState));
-        bool descending = ChampionSortDirection == "Descending";
+        bool descending = ChampionSortDirection == DescendingSortDirection;
         items = ChampionSort switch
         {
-            "Mastery level" => descending
+            MasteryLevelSort => descending
                 ? items.OrderBy(item => item.Mastery is null).ThenByDescending(item => item.Mastery?.Level).ThenByDescending(item => item.Mastery?.Points).ThenBy(item => item.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(item => item.Champion.ChampionId)
                 : items.OrderBy(item => item.Mastery is null).ThenBy(item => item.Mastery?.Level).ThenBy(item => item.Mastery?.Points).ThenBy(item => item.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(item => item.Champion.ChampionId),
-            "Mastery points" => descending
+            MasteryPointsSort => descending
                 ? items.OrderBy(item => item.Mastery is null).ThenByDescending(item => item.Mastery?.Points).ThenByDescending(item => item.Mastery?.Level).ThenBy(item => item.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(item => item.Champion.ChampionId)
                 : items.OrderBy(item => item.Mastery is null).ThenBy(item => item.Mastery?.Points).ThenBy(item => item.Mastery?.Level).ThenBy(item => item.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(item => item.Champion.ChampionId),
             _ => descending
@@ -220,13 +296,37 @@ public sealed partial class AccountDetailsViewModel : ObservableObject, IDisposa
         OnPropertyChanged(nameof(ChampionCount));
     }
 
-    private void BuildChampionRows() => BuildRows(Champions, ChampionRows, GalleryColumnCount);
+    private void BuildChampionRows()
+    {
+        BuildRows(Champions, ChampionRows, GalleryColumnCount);
+        OnPropertyChanged(nameof(IsChampionEmptyStateVisible));
+        OnPropertyChanged(nameof(ChampionEmptyTitle));
+        OnPropertyChanged(nameof(ChampionEmptyMessage));
+    }
 
-    private void BuildSkinRows() => BuildRows(Skins, SkinRows, GalleryColumnCount);
+    private void BuildSkinRows()
+    {
+        BuildRows(Skins, SkinRows, GalleryColumnCount);
+        OnPropertyChanged(nameof(IsSkinEmptyStateVisible));
+        OnPropertyChanged(nameof(SkinEmptyTitle));
+        OnPropertyChanged(nameof(SkinEmptyMessage));
+    }
 
-    private void BuildRankRows() => BuildRows(Ranks, RankRows, GalleryColumnCount);
+    private void BuildRankRows()
+    {
+        BuildRows(Ranks, RankRows, GalleryColumnCount);
+        OnPropertyChanged(nameof(IsRankedEmptyStateVisible));
+        OnPropertyChanged(nameof(RankedEmptyTitle));
+        OnPropertyChanged(nameof(RankedEmptyMessage));
+    }
 
-    private void BuildLootRows() => BuildRows(Loot, LootRows, CraftingColumnCount);
+    private void BuildLootRows()
+    {
+        BuildRows(Loot, LootRows, CraftingColumnCount);
+        OnPropertyChanged(nameof(IsCraftingEmptyStateVisible));
+        OnPropertyChanged(nameof(CraftingEmptyTitle));
+        OnPropertyChanged(nameof(CraftingEmptyMessage));
+    }
 
     private static void BuildRows<T>(IReadOnlyList<T> source, ObservableCollection<GalleryRow<T>> target, int columnCount) where T : class
     {
@@ -239,28 +339,36 @@ public sealed partial class AccountDetailsViewModel : ObservableObject, IDisposa
 
     private List<string> BuildChampionCollections()
     {
-        var collections = new List<string> { "Current champions", "League Classic" };
+        var collections = new List<string> { CurrentChampionsCollection, LeagueClassicCollection };
         if (HasOtherChampions)
         {
-            collections.Add("Other");
+            collections.Add(OtherChampionsCollection);
         }
 
         return collections;
     }
 
     private static bool Contains(string? value, string query) => string.IsNullOrWhiteSpace(query) || value?.Contains(query.Trim(), StringComparison.CurrentCultureIgnoreCase) == true;
-    private static int RankOrder(RankSnapshot rank) => rank.QueueType switch { "RANKED_SOLO_5x5" => 0, "RANKED_FLEX_SR" => 1, _ => 2 };
+    private bool HasCraftingFilter => !string.IsNullOrWhiteSpace(LootQuery) || LootCategory != CraftingLootCategory.All;
+    private SnapshotState GetSnapshotState(SnapshotCategory category) =>
+        _account.SyncCategories.FirstOrDefault(status => status.Category == category)?.State ?? SnapshotState.Unknown;
+    private static int RankOrder(RankSnapshot rank) => rank.QueueType switch
+    {
+        LeagueQueueType.RankedSoloDuo => 0,
+        LeagueQueueType.RankedFlex => 1,
+        _ => 2
+    };
     private CraftingGalleryItem CreateCraftingItem(CraftingLootItem item)
     {
         string category = NormalizeLootCategory(item);
         string? name = CurrencyName(item) ?? item.LocalizedName?.Trim();
         if (string.IsNullOrWhiteSpace(name) && int.TryParse(item.ReferenceId, out int referenceId))
         {
-            if (category == "Skin shards" && _account.Skins.FirstOrDefault(x => x.SkinId == referenceId) is { } skin)
+            if (category == CraftingLootCategory.SkinShards && _account.Skins.FirstOrDefault(x => x.SkinId == referenceId) is { } skin)
             {
                 name = $"{skin.Name} shard";
             }
-            else if (category == "Champion shards" && _account.Champions.FirstOrDefault(x => x.ChampionId == referenceId) is { } champion)
+            else if (category == CraftingLootCategory.ChampionShards && _account.Champions.FirstOrDefault(x => x.ChampionId == referenceId) is { } champion)
             {
                 name = $"{champion.Name} shard";
             }
@@ -275,12 +383,12 @@ public sealed partial class AccountDetailsViewModel : ObservableObject, IDisposa
     private static string? CurrencyName(CraftingLootItem item)
     {
         string value = $"{item.LootId} {item.LootName} {item.LocalizedName}";
-        if (value.Contains("CURRENCY_champion", StringComparison.OrdinalIgnoreCase))
+        if (value.Contains(CraftingCurrency.BlueEssence, StringComparison.OrdinalIgnoreCase))
         {
             return "Blue Essence";
         }
 
-        if (value.Contains("CURRENCY_cosmetic", StringComparison.OrdinalIgnoreCase))
+        if (value.Contains(CraftingCurrency.OrangeEssence, StringComparison.OrdinalIgnoreCase))
         {
             return "Orange Essence";
         }
@@ -290,32 +398,34 @@ public sealed partial class AccountDetailsViewModel : ObservableObject, IDisposa
     private string CurrencyTotal(params string[] markers)
     {
         long total = _account.LootItems.Where(item => markers.Any(marker => $"{item.LootId} {item.LootName} {item.LocalizedName}".Contains(marker, StringComparison.OrdinalIgnoreCase))).Sum(item => (long)item.Count);
-        return total.ToString("N0", CultureInfo.CurrentCulture);
+        return total == 0 && GetSnapshotState(SnapshotCategory.Crafting) == SnapshotState.Unknown
+            ? "Not synced"
+            : total.ToString("N0", CultureInfo.CurrentCulture);
     }
     internal static string NormalizeLootCategory(CraftingLootItem item)
     {
         string value = $"{item.DisplayCategory} {item.Type} {item.LootName}";
         if (value.Contains("CURRENCY", StringComparison.OrdinalIgnoreCase))
         {
-            return "Currencies";
+            return CraftingLootCategory.Currencies;
         }
 
         if (value.Contains("SKIN", StringComparison.OrdinalIgnoreCase))
         {
-            return "Skin shards";
+            return CraftingLootCategory.SkinShards;
         }
 
         if (value.Contains("CHAMPION", StringComparison.OrdinalIgnoreCase))
         {
-            return "Champion shards";
+            return CraftingLootCategory.ChampionShards;
         }
 
         if (value.Contains("MATERIAL", StringComparison.OrdinalIgnoreCase) || value.Contains("CHEST", StringComparison.OrdinalIgnoreCase) || value.Contains("KEY", StringComparison.OrdinalIgnoreCase) || value.Contains("TOKEN", StringComparison.OrdinalIgnoreCase))
         {
-            return "Materials";
+            return CraftingLootCategory.Materials;
         }
 
-        return "Other";
+        return CraftingLootCategory.Other;
     }
     private static string Friendly(string value) => string.Join(' ', value.Replace('_', ' ').Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(word => char.ToUpperInvariant(word[0]) + word[1..].ToLowerInvariant()));
     public void Dispose() { _debounce?.Cancel(); _debounce?.Dispose(); Champions.Clear(); Skins.Clear(); Loot.Clear(); ChampionRows.Clear(); SkinRows.Clear(); LootRows.Clear(); RankRows.Clear(); }
@@ -383,7 +493,13 @@ public sealed class RankCardItem(RankSnapshot rank)
     private readonly RankSnapshot _rank = rank;
 
     public RankSnapshot Rank => _rank;
-    public string Queue => _rank.QueueType switch { "RANKED_SOLO_5x5" => "Solo / Duo", "RANKED_FLEX_SR" => "Ranked Flex", "JADE_RANKED_SOLO_5x5" or "JADE_SOLO_5x5" => "League Classic Solo / Duo", _ => _rank.QueueType.Replace('_', ' ') };
+    public string Queue => _rank.QueueType switch
+    {
+        LeagueQueueType.RankedSoloDuo => "Solo / Duo",
+        LeagueQueueType.RankedFlex => "Ranked Flex",
+        LeagueQueueType.LeagueClassicSoloDuo or LeagueQueueType.LeagueClassicSoloDuoLegacy => "League Classic Solo / Duo",
+        _ => _rank.QueueType.Replace('_', ' ')
+    };
     private bool HasRatedRank => !string.IsNullOrWhiteSpace(_rank.RatedTier) && !_rank.RatedTier.Equals("NONE", StringComparison.OrdinalIgnoreCase) && _rank.RatedRating is > 0;
     public string RankText => HasRatedRank ? $"{Title(_rank.RatedTier!)} · {_rank.RatedRating:N0} rating" : IsUnranked ? "Unranked" : $"{Title(_rank.Tier)} {_rank.Division} · {_rank.LeaguePoints} LP";
     public string Record => $"{_rank.Wins} wins · {_rank.Losses} losses · {_rank.Wins + _rank.Losses} games";

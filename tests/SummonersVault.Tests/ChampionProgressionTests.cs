@@ -144,6 +144,44 @@ public sealed class ChampionProgressionTests
         Assert.Equal((int)Math.Ceiling(5d / expectedCraftingColumns), viewModel.LootRows.Count);
     }
 
+    [Fact]
+    public void AccountDetailTabs_ExplainUnsynchronizedEmptySnapshots()
+    {
+        using var viewModel = new AccountDetailsViewModel(new VaultAccount(), new NullArtworkService(), new AppSettings());
+
+        Assert.True(viewModel.IsChampionEmptyStateVisible);
+        Assert.True(viewModel.IsSkinEmptyStateVisible);
+        Assert.True(viewModel.IsRankedEmptyStateVisible);
+        Assert.True(viewModel.IsCraftingEmptyStateVisible);
+        Assert.Equal("Champions not synchronized", viewModel.ChampionEmptyTitle);
+        Assert.Equal("Skins not synchronized", viewModel.SkinEmptyTitle);
+        Assert.Equal("Ranked data not synchronized", viewModel.RankedEmptyTitle);
+        Assert.Equal("Crafting not synchronized", viewModel.CraftingEmptyTitle);
+        Assert.Equal("Not synced", viewModel.OrangeEssence);
+        Assert.Equal("Not synced", viewModel.MythicEssence);
+    }
+
+    [Fact]
+    public void AccountDetailTabs_DistinguishSynchronizedEmptySnapshots()
+    {
+        var account = new VaultAccount();
+        account.SyncCategories.AddRange(
+        [
+            new(SnapshotCategory.Champions, SnapshotState.Current, null, null),
+            new(SnapshotCategory.Skins, SnapshotState.Current, null, null),
+            new(SnapshotCategory.Ranked, SnapshotState.Current, null, null),
+            new(SnapshotCategory.Crafting, SnapshotState.Current, null, null)
+        ]);
+        using var viewModel = new AccountDetailsViewModel(account, new NullArtworkService(), new AppSettings());
+
+        Assert.Equal("No champions in this collection", viewModel.ChampionEmptyTitle);
+        Assert.Equal("No owned skins found", viewModel.SkinEmptyTitle);
+        Assert.Equal("No ranked queues found", viewModel.RankedEmptyTitle);
+        Assert.Equal("Crafting inventory is empty", viewModel.CraftingEmptyTitle);
+        Assert.Equal("0", viewModel.OrangeEssence);
+        Assert.Equal("0", viewModel.MythicEssence);
+    }
+
     private static CraftingLootItem CreateLootItem(string lootId, string name) =>
         new(lootId, name, "MATERIAL", "Materials", name, null, 1, null, null, null, null, null, null, null, null);
 

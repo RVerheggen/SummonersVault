@@ -34,7 +34,7 @@ public sealed class VaultAccount
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Username { get; set; } = string.Empty;
     public string? Label { get; set; }
-    public string Region { get; set; } = "EUW";
+    public string Region { get; set; } = LeagueRegion.EuropeWest;
     public string? Notes { get; set; }
     public AccountRole Roles { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
@@ -69,8 +69,8 @@ public sealed class VaultAccount
             ? $"{RiotGameName}#{RiotTagLine}"
             : Username;
 
-    public RankSnapshot? CardRank => Ranks.FirstOrDefault(x => x.QueueType == "RANKED_SOLO_5x5")
-        ?? Ranks.FirstOrDefault(x => x.QueueType == "RANKED_FLEX_SR");
+    public RankSnapshot? CardRank => Ranks.FirstOrDefault(x => x.QueueType == LeagueQueueType.RankedSoloDuo)
+        ?? Ranks.FirstOrDefault(x => x.QueueType == LeagueQueueType.RankedFlex);
 
 }
 

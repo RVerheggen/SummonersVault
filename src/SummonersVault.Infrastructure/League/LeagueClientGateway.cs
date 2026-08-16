@@ -8,6 +8,9 @@ namespace SummonersVault.Infrastructure.League;
 
 public sealed class LeagueClientGateway(LeagueClientConnection connection) : ILeagueClientGateway, ILeagueClientConfiguration
 {
+    private const int MaximumAssetDownloadBytes = 8 * 1024 * 1024;
+    private const int MaximumConcurrentEternalRequests = 4;
+
     public void SetInstallDirectory(string? directory) => connection.SetInstallDirectory(directory);
 
     public async Task<LeagueClientStatus> GetStatusAsync(CancellationToken cancellationToken = default)
@@ -21,7 +24,7 @@ public sealed class LeagueClientGateway(LeagueClientConnection connection) : ILe
         try
         {
             using HttpClient client = LeagueClientConnection.CreateAuthenticatedClient(lockfile);
-            using HttpResponseMessage response = await client.GetAsync("lol-summoner/v1/current-summoner", cancellationToken).ConfigureAwait(false);
+            using HttpResponseMessage response = await client.GetAsync(LeagueClientRoutes.CurrentSummoner, cancellationToken).ConfigureAwait(false);
             return response.IsSuccessStatusCode
                 ? new(true, true, "League Client connected")
                 : new(true, false, "League Client is waiting for sign-in");
@@ -34,7 +37,7 @@ public sealed class LeagueClientGateway(LeagueClientConnection connection) : ILe
     {
         LeagueLockfile lockfile = await connection.FindLockfileAsync(cancellationToken).ConfigureAwait(false) ?? throw new InvalidOperationException("League Client is not running.");
         using HttpClient client = LeagueClientConnection.CreateAuthenticatedClient(lockfile);
-        using JsonDocument summoner = await GetJsonAsync(client, "lol-summoner/v1/current-summoner", cancellationToken).ConfigureAwait(false)
+        using JsonDocument summoner = await GetJsonAsync(client, LeagueClientRoutes.CurrentSummoner, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException("Sign into League Client before synchronizing.");
         JsonElement root = summoner.RootElement;
         string puuid = GetString(root, "puuid") ?? throw new InvalidDataException("League Client did not return a PUUID.");
@@ -44,8 +47,8 @@ public sealed class LeagueClientGateway(LeagueClientConnection connection) : ILe
         string tag = GetString(root, "tagLine") ?? string.Empty;
         int? iconId = GetInt32(root, "profileIconId");
 
-        string region = "UNKNOWN";
-        using (JsonDocument? regionJson = await TryGetJsonAsync(client, "riotclient/region-locale", cancellationToken).ConfigureAwait(false))
+        string region = LeagueRegion.Unknown;
+        using (JsonDocument? regionJson = await TryGetJsonAsync(client, LeagueClientRoutes.RegionLocale, cancellationToken).ConfigureAwait(false))
         {
             if (regionJson is not null)
             {
@@ -99,7 +102,7 @@ public sealed class LeagueClientGateway(LeagueClientConnection connection) : ILe
         LeagueLockfile lockfile = await connection.FindLockfileAsync(cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException("League Client is not running.");
         using HttpClient client = LeagueClientConnection.CreateAuthenticatedClient(lockfile);
-        using JsonDocument summoner = await GetJsonAsync(client, "lol-summoner/v1/current-summoner", cancellationToken).ConfigureAwait(false)
+        using JsonDocument summoner = await GetJsonAsync(client, LeagueClientRoutes.CurrentSummoner, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException("Sign into League Client before synchronizing.");
         string puuid = GetString(summoner.RootElement, "puuid")
             ?? throw new InvalidDataException("League Client did not return a PUUID.");
@@ -133,7 +136,7 @@ public sealed class LeagueClientGateway(LeagueClientConnection connection) : ILe
         {
             using HttpClient client = LeagueClientConnection.CreateAuthenticatedClient(lockfile);
             using HttpResponseMessage response = await client.GetAsync(assetPath.TrimStart('/'), cancellationToken).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode || response.Content.Headers.ContentLength > 8 * 1024 * 1024)
+            if (!response.IsSuccessStatusCode || response.Content.Headers.ContentLength > MaximumAssetDownloadBytes)
             {
                 return null;
             }
@@ -183,7 +186,7 @@ public sealed class LeagueClientGateway(LeagueClientConnection connection) : ILe
         try
         {
             using HttpResponseMessage response = await client.GetAsync(
-                $"lol-game-data/assets/v1/profile-icons/{iconId.Value}.jpg",
+                LeagueClientRoutes.ProfileIcon(iconId.Value),
                 cancellationToken).ConfigureAwait(false);
             return response.IsSuccessStatusCode
                 ? await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false)
@@ -198,7 +201,7 @@ public sealed class LeagueClientGateway(LeagueClientConnection connection) : ILe
     private static async Task<LeagueWalletSnapshot?> FetchWalletAsync(HttpClient client, CancellationToken cancellationToken)
     {
         LeagueWalletSnapshot? partial = null;
-        foreach (string? path in new[] { "lol-login/v1/wallet", "lol-store/v1/wallet" })
+        foreach (string path in LeagueClientRoutes.WalletSummaries)
         {
             using JsonDocument? json = await TryGetJsonAsync(client, path, cancellationToken).ConfigureAwait(false);
             if (json is null)
@@ -220,10 +223,10 @@ public sealed class LeagueClientGateway(LeagueClientConnection connection) : ILe
         }
 
         long? riotPoints = partial?.RiotPoints
-            ?? await FetchWalletCurrencyAsync(client, "RP", cancellationToken).ConfigureAwait(false);
+            ?? await FetchWalletCurrencyAsync(client, LeagueClientRoutes.RiotPointsCurrency, cancellationToken).ConfigureAwait(false);
         long? blueEssence = partial?.BlueEssence
-            ?? await FetchWalletCurrencyAsync(client, "lol_blue_essence", cancellationToken).ConfigureAwait(false)
-            ?? await FetchWalletCurrencyAsync(client, "IP", cancellationToken).ConfigureAwait(false);
+            ?? await FetchWalletCurrencyAsync(client, LeagueClientRoutes.BlueEssenceCurrency, cancellationToken).ConfigureAwait(false)
+            ?? await FetchWalletCurrencyAsync(client, LeagueClientRoutes.LegacyInfluencePointsCurrency, cancellationToken).ConfigureAwait(false);
 
         if (riotPoints.HasValue || blueEssence.HasValue)
         {
@@ -243,7 +246,7 @@ public sealed class LeagueClientGateway(LeagueClientConnection connection) : ILe
     {
         using JsonDocument? json = await TryGetJsonAsync(
             client,
-            $"lol-inventory/v1/wallet/{currencyType}",
+            LeagueClientRoutes.WalletCurrency(currencyType),
             cancellationToken).ConfigureAwait(false);
 
         return json is null ? null : ParseWalletCurrency(json.RootElement, currencyType);
@@ -291,7 +294,7 @@ public sealed class LeagueClientGateway(LeagueClientConnection connection) : ILe
 
     private static async Task<IReadOnlyList<RankSnapshot>?> FetchRanksAsync(HttpClient client, CancellationToken cancellationToken)
     {
-        using JsonDocument? json = await TryGetJsonAsync(client, "lol-ranked/v1/current-ranked-stats", cancellationToken).ConfigureAwait(false);
+        using JsonDocument? json = await TryGetJsonAsync(client, LeagueClientRoutes.RankedStats, cancellationToken).ConfigureAwait(false);
         if (json is null)
         {
             return null;
@@ -332,7 +335,7 @@ public sealed class LeagueClientGateway(LeagueClientConnection connection) : ILe
 
     private static async Task<IReadOnlyList<OwnedChampion>?> FetchChampionsAsync(HttpClient client, long summonerId, CancellationToken cancellationToken)
     {
-        using JsonDocument? json = await TryGetJsonAsync(client, $"lol-champions/v1/inventories/{summonerId}/champions-minimal", cancellationToken).ConfigureAwait(false);
+        using JsonDocument? json = await TryGetJsonAsync(client, LeagueClientRoutes.Champions(summonerId), cancellationToken).ConfigureAwait(false);
         if (json is null || !IsInventoryPayloadReady(json.RootElement))
         {
             return null;
@@ -372,7 +375,7 @@ public sealed class LeagueClientGateway(LeagueClientConnection connection) : ILe
 
     private static async Task<IReadOnlyList<ChampionMastery>?> FetchChampionMasteriesAsync(HttpClient client, CancellationToken cancellationToken)
     {
-        using JsonDocument? json = await TryGetJsonAsync(client, "lol-champion-mastery/v1/local-player/champion-mastery", cancellationToken).ConfigureAwait(false);
+        using JsonDocument? json = await TryGetJsonAsync(client, LeagueClientRoutes.ChampionMastery, cancellationToken).ConfigureAwait(false);
         return json is null ? null : ParseChampionMasteries(json.RootElement);
     }
 
@@ -411,7 +414,7 @@ public sealed class LeagueClientGateway(LeagueClientConnection connection) : ILe
 
     private static async Task<ChampionEternalsSnapshot?> FetchChampionEternalsAsync(HttpClient client, CancellationToken cancellationToken)
     {
-        using JsonDocument? summaryJson = await TryGetJsonAsync(client, "lol-statstones/v2/player-summary-self", cancellationToken).ConfigureAwait(false);
+        using JsonDocument? summaryJson = await TryGetJsonAsync(client, LeagueClientRoutes.EternalSummary, cancellationToken).ConfigureAwait(false);
         if (summaryJson is null)
         {
             return null;
@@ -421,13 +424,13 @@ public sealed class LeagueClientGateway(LeagueClientConnection connection) : ILe
         Dictionary<(int ChampionId, string Name), ChampionEternalSet> summarySets = ParseEternalSetSummaries(summaryJson.RootElement)
             .ToDictionary(set => (set.ChampionId, set.Name), set => set);
         ChampionEternalSummary[] owned = [.. summaries.Where(summary => summary.StonesOwned > 0)];
-        using var concurrency = new SemaphoreSlim(4, 4);
+        using var concurrency = new SemaphoreSlim(MaximumConcurrentEternalRequests, MaximumConcurrentEternalRequests);
         Task<EternalDetailResult>[] requests = [.. owned.Select(async summary =>
         {
             await concurrency.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                using JsonDocument? detailJson = await TryGetJsonAsync(client, $"lol-statstones/v2/player-statstones-self/{summary.ChampionId}", cancellationToken).ConfigureAwait(false);
+                using JsonDocument? detailJson = await TryGetJsonAsync(client, LeagueClientRoutes.EternalDetails(summary.ChampionId), cancellationToken).ConfigureAwait(false);
                 if (detailJson is null)
                 {
                     return EternalDetailResult.Failed(summary.ChampionId);
@@ -565,7 +568,7 @@ public sealed class LeagueClientGateway(LeagueClientConnection connection) : ILe
 
     private static async Task<IReadOnlyList<OwnedSkin>?> FetchSkinsAsync(HttpClient client, long summonerId, CancellationToken cancellationToken)
     {
-        using JsonDocument? json = await TryGetJsonAsync(client, $"lol-champions/v1/inventories/{summonerId}/skins-minimal", cancellationToken).ConfigureAwait(false);
+        using JsonDocument? json = await TryGetJsonAsync(client, LeagueClientRoutes.Skins(summonerId), cancellationToken).ConfigureAwait(false);
         if (json is null || !IsInventoryPayloadReady(json.RootElement))
         {
             return null;
@@ -581,13 +584,13 @@ public sealed class LeagueClientGateway(LeagueClientConnection connection) : ILe
 
     private static async Task<IReadOnlyList<CraftingLootItem>?> FetchCraftingLootAsync(HttpClient client, IReadOnlyList<OwnedChampion>? champions, IReadOnlyList<OwnedSkin>? skins, CancellationToken cancellationToken)
     {
-        using JsonDocument? readyJson = await TryGetJsonAsync(client, "lol-loot/v1/ready", cancellationToken).ConfigureAwait(false);
+        using JsonDocument? readyJson = await TryGetJsonAsync(client, LeagueClientRoutes.LootReady, cancellationToken).ConfigureAwait(false);
         if (readyJson is null || !ParseLootReady(readyJson.RootElement))
         {
             return null;
         }
 
-        using JsonDocument? json = await TryGetJsonAsync(client, "lol-loot/v1/player-loot", cancellationToken).ConfigureAwait(false);
+        using JsonDocument? json = await TryGetJsonAsync(client, LeagueClientRoutes.PlayerLoot, cancellationToken).ConfigureAwait(false);
         if (json is null)
         {
             return null;
@@ -635,36 +638,36 @@ public sealed class LeagueClientGateway(LeagueClientConnection connection) : ILe
         string value = $"{displayCategory} {type} {name}";
         if (value.Contains("CURRENCY", StringComparison.OrdinalIgnoreCase))
         {
-            return "Currencies";
+            return CraftingLootCategory.Currencies;
         }
 
         if (value.Contains("CHAMPION", StringComparison.OrdinalIgnoreCase))
         {
-            return "Champion shards";
+            return CraftingLootCategory.ChampionShards;
         }
 
         if (value.Contains("SKIN", StringComparison.OrdinalIgnoreCase))
         {
-            return "Skin shards";
+            return CraftingLootCategory.SkinShards;
         }
 
         if (value.Contains("MATERIAL", StringComparison.OrdinalIgnoreCase) || value.Contains("CHEST", StringComparison.OrdinalIgnoreCase) || value.Contains("KEY", StringComparison.OrdinalIgnoreCase) || value.Contains("TOKEN", StringComparison.OrdinalIgnoreCase))
         {
-            return "Materials";
+            return CraftingLootCategory.Materials;
         }
 
-        return "Other";
+        return CraftingLootCategory.Other;
     }
 
     private static string? CurrencyDisplayName(string lootId, string lootName)
     {
         string value = $"{lootId} {lootName}";
-        if (value.Contains("CURRENCY_champion", StringComparison.OrdinalIgnoreCase))
+        if (value.Contains(CraftingCurrency.BlueEssence, StringComparison.OrdinalIgnoreCase))
         {
             return "Blue Essence";
         }
 
-        if (value.Contains("CURRENCY_cosmetic", StringComparison.OrdinalIgnoreCase))
+        if (value.Contains(CraftingCurrency.OrangeEssence, StringComparison.OrdinalIgnoreCase))
         {
             return "Orange Essence";
         }
@@ -690,12 +693,12 @@ public sealed class LeagueClientGateway(LeagueClientConnection connection) : ILe
                 return item;
             }
 
-            if (item.DisplayCategory == "Champion shards" && championNames.TryGetValue(referenceId, out string? championName))
+            if (item.DisplayCategory == CraftingLootCategory.ChampionShards && championNames.TryGetValue(referenceId, out string? championName))
             {
                 return item with { LocalizedName = $"{championName} shard" };
             }
 
-            if (item.DisplayCategory == "Skin shards" && skinNames.TryGetValue(referenceId, out string? skinName))
+            if (item.DisplayCategory == CraftingLootCategory.SkinShards && skinNames.TryGetValue(referenceId, out string? skinName))
             {
                 return item with { LocalizedName = $"{skinName} shard" };
             }
@@ -732,7 +735,7 @@ public sealed class LeagueClientGateway(LeagueClientConnection connection) : ILe
 
     private static async Task<MatchSnapshotResult> FetchLatestMatchAsync(HttpClient client, string puuid, CancellationToken cancellationToken)
     {
-        using JsonDocument? json = await TryGetJsonAsync(client, $"lol-match-history/v1/products/lol/{Uri.EscapeDataString(puuid)}/matches?begIndex=0&endIndex=1", cancellationToken).ConfigureAwait(false);
+        using JsonDocument? json = await TryGetJsonAsync(client, LeagueClientRoutes.LatestMatches(puuid), cancellationToken).ConfigureAwait(false);
         if (json is null)
         {
             return MatchSnapshotResult.Failed;
