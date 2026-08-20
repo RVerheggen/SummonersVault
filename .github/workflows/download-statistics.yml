@@ -1,0 +1,99 @@
+name: Download statistics
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/download-statistics.yml
+      - scripts/Get-ReleaseDownloadBadge.ps1
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+  workflow_run:
+    workflows:
+      - Release
+    types:
+      - completed
+
+permissions:
+  contents: write
+
+concurrency:
+  group: download-statistics
+  cancel-in-progress: true
+
+jobs:
+  update-download-counter:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Calculate release downloads
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./scripts/Get-ReleaseDownloadBadge.ps1 `
+            -Repository "${{ github.repository }}" `
+            -GitHubToken $env:GITHUB_TOKEN `
+            -OutputPath "$env:RUNNER_TEMP/download-count.json"
+
+      - name: Publish badge data
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $repository = "${{ github.repository }}"
+          $statisticsBranch = 'download-statistics'
+          $badgePath = 'download-count.json'
+          $badgeContent = Get-Content "$env:RUNNER_TEMP/download-count.json" -Raw
+
+          $defaultBranch = gh api "repos/$repository" --jq '.default_branch'
+          $defaultCommit = gh api "repos/$repository/git/ref/heads/$defaultBranch" --jq '.object.sha'
+
+          gh api "repos/$repository/git/ref/heads/$statisticsBranch" --silent 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh api "repos/$repository/git/refs" `
+              --method POST `
+              -f "ref=refs/heads/$statisticsBranch" `
+              -f "sha=$defaultCommit" `
+              --silent
+          }
+
+          $existingFileJson = gh api "repos/$repository/contents/$badgePath`?ref=$statisticsBranch" 2>$null
+          $existingFile = if ($LASTEXITCODE -eq 0) { $existingFileJson | ConvertFrom-Json } else { $null }
+
+          if ($null -ne $existingFile) {
+            $existingContentBytes = [Convert]::FromBase64String(($existingFile.content -replace '\s', ''))
+            $existingContent = [Text.Encoding]::UTF8.GetString($existingContentBytes)
+            if ($existingContent.TrimEnd() -eq $badgeContent.TrimEnd()) {
+              Write-Host 'Download counter is already current.'
+              exit 0
+            }
+          }
+
+          $encodedContent = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($badgeContent))
+          $arguments = @(
+            'api',
+            "repos/$repository/contents/$badgePath",
+            '--method', 'PUT',
+            '-f', 'message=Update release download counter',
+            '-f', "content=$encodedContent",
+            '-f', "branch=$statisticsBranch",
+            '--silent'
+          )
+
+          if ($null -ne $existingFile) {
+            $arguments += @('-f', "sha=$($existingFile.sha)")
+          }
+
+          & gh @arguments
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Could not publish the download counter.'
+          }

@@ -1,5 +1,7 @@
 # SummonersVault
 
+[![Release downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FRVerheggen%2FSummonersVault%2Fdownload-statistics%2Fdownload-count.json&logo=github&cacheSeconds=3600)](https://github.com/RVerheggen/SummonersVault/releases)
+
 SummonersVault is a free, open-source, local-only Windows password manager and read-only League Client companion. It keeps account credentials, notes, role tags, and offline League snapshots in an encrypted SQLite3MC database. Stored snapshots include ranks, owned champions and skins, wallet balances, crafting materials, and last-played match information.
 
 [Website](https://rverheggen.github.io/SummonersVault) | [Releases](https://github.com/RVerheggen/SummonersVault/releases) | [Privacy](PRIVACY.md) | [Terms](TERMS.md) | [Source](https://github.com/RVerheggen/SummonersVault) | [Security](SECURITY.md) | [Third-party notices](THIRD_PARTY_NOTICES.md)
@@ -28,6 +30,8 @@ Public releases provide two Windows 11 x64 downloads:
 - `SummonersVault.Desktop-win-Portable.zip` is intended for advanced users and testers.
 
 Both packages are self-contained and do not require a separate .NET installation. Vault data remains beneath `%LOCALAPPDATA%\SummonersVault` and is not replaced by application updates.
+
+The release-download badge counts installer, portable ZIP, and Velopack full or delta package downloads across stable GitHub Releases. It excludes update-feed metadata, checksums, and release notes. This is a download count, not a count of unique users or installations. Re-downloads, update fallbacks, and automated release preparation can increase it. SummonersVault does not collect installation or usage telemetry.
 
 SummonersVault can check the public GitHub Releases feed shortly after startup, at most once every 24 hours. It does not run an update service or background process while closed. Update downloads and installation always require user approval, and automatic checks can be disabled in Settings. The installed version and a manual `Check for updates` action are always available in Settings.
 
